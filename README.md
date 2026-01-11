@@ -59,3 +59,28 @@ Free Trial,Churned,1300
 Converted,Pro Plan,1200
 Converted,Enterprise,600
 ```
+
+```mermaid
+quadrantChart
+    title Feature Prioritization
+    x-axis Low Effort --> High Effort
+    y-axis Low Impact --> High Impact
+    quadrant-1 Do First
+    quadrant-2 Schedule
+    quadrant-3 Delegate
+    quadrant-4 Eliminate
+    Dark Mode: [0.2, 0.9]
+    API v2: [0.7, 0.85]
+    Bug Fixes: [0.15, 0.5]
+    Refactor Auth: [0.9, 0.4]
+    Update Docs: [0.3, 0.3]
+```
+
+```mermaid
+xychart-beta
+    title "Monthly Active Users (2024)"
+    x-axis [Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec]
+    y-axis "Users (thousands)" 0 --> 150
+    bar [23, 34, 45, 52, 67, 78, 89, 95, 108, 120, 135, 142]
+    line [23, 34, 45, 52, 67, 78, 89, 95, 108, 120, 135, 142]
+```
