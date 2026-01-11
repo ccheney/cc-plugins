@@ -1,0 +1,17 @@
+{
+  "name": "cc-plugins",
+  "description": "Custom Claude Code plugins for enhanced development workflows",
+  "owner": {
+    "name": "ccheney",
+    "email": ""
+  },
+  "plugins": [
+    {
+      "name": "cc-plugins",
+      "source": "ccheney/cc-plugins",
+      "description": "Mermaid diagram generation and more",
+      "version": "1.0.0",
+      "author": "ccheney"
+    }
+  ]
+}
