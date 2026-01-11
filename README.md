@@ -44,3 +44,18 @@ Generate Mermaid diagrams in markdown. Claude will automatically use this skill 
 "Draw an ER diagram for a blog database"
 "Make a flowchart of the CI/CD pipeline"
 ```
+
+**Did you know Mermaid can do this?**
+
+```mermaid
+sankey-beta
+
+Visitors,Signed Up,4200
+Visitors,Bounced,8500
+Signed Up,Free Trial,3100
+Signed Up,Churned,1100
+Free Trial,Converted,1800
+Free Trial,Churned,1300
+Converted,Pro Plan,1200
+Converted,Enterprise,600
+```
