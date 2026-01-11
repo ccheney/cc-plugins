@@ -1,0 +1,13 @@
+{
+  "name": "cc-plugins",
+  "version": "1.0.0",
+  "description": "Custom Claude Code plugins including diagram generation and more",
+  "author": {
+    "name": "ccheney",
+    "url": "https://github.com/ccheney"
+  },
+  "repository": "https://github.com/ccheney/cc-plugins",
+  "license": "MIT",
+  "keywords": ["mermaid", "diagrams", "visualization"],
+  "skills": "./skills/"
+}
