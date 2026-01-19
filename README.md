@@ -25,18 +25,12 @@ Production-grade skills that encode battle-tested architectural patterns and bes
 
 ```bash
 npx add-skill ccheney/robust-skills
-# OR
-npx openskills add ccheney/robust-skills
 ```
 
 ### Install a Specific Skill
 
 ```bash
-# add-skill
 npx add-skill ccheney/robust-skills/clean-ddd-hexagonal
-
-# openskills
-npx openskills add ccheney/robust-skills --skill clean-ddd-hexagonal
 ```
 
 ## Usage
