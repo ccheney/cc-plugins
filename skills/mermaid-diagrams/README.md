@@ -1,6 +1,6 @@
 # mermaid-diagrams
 
-Generate Mermaid diagrams in markdown. Claude will automatically use this skill when you ask for diagrams, charts, visualizations, or system documentation.
+Generate Mermaid diagrams in markdown. This skill activates automatically when you ask for diagrams, charts, visualizations, or system documentation.
 
 ## Supported Diagram Types
 

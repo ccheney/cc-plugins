@@ -1,6 +1,6 @@
 # postgres-drizzle
 
-PostgreSQL and Drizzle ORM best practices. Claude will automatically use this skill when writing database schemas, queries, migrations, or any database-related code.
+PostgreSQL and Drizzle ORM best practices. This skill activates automatically when writing database schemas, queries, migrations, or any database-related code.
 
 ## Topics Covered
 

@@ -1,7 +1,7 @@
 {
   "name": "robust-skills",
   "version": "2.0.0",
-  "description": "Custom Claude Code plugins for enhanced development workflows",
+  "description": "Production-grade skills for AI coding agents",
   "author": {
     "name": "ccheney",
     "url": "https://github.com/ccheney"
