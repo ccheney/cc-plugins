@@ -1,5 +1,5 @@
 {
-  "name": "cc-plugins",
+  "name": "robust-skills",
   "description": "Custom Claude Code plugins for enhanced development workflows",
   "owner": {
     "name": "ccheney",
@@ -7,10 +7,10 @@
   },
   "plugins": [
     {
-      "name": "cc-plugins",
+      "name": "robust-skills",
       "source": {
         "source": "github",
-        "repo": "ccheney/cc-plugins"
+        "repo": "ccheney/robust-skills"
       },
       "description": "Custom Claude Code plugins for enhanced development workflows",
       "version": "1.1.1",

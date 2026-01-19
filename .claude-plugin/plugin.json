@@ -1,12 +1,12 @@
 {
-  "name": "cc-plugins",
+  "name": "robust-skills",
   "version": "1.1.1",
   "description": "Custom Claude Code plugins for enhanced development workflows",
   "author": {
     "name": "ccheney",
     "url": "https://github.com/ccheney"
   },
-  "repository": "https://github.com/ccheney/cc-plugins",
+  "repository": "https://github.com/ccheney/robust-skills",
   "license": "MIT",
   "keywords": ["mermaid", "diagrams", "postgres", "drizzle", "database"],
   "skills": "./skills/"
