@@ -44,12 +44,12 @@ Once installed, skills activate automatically based on context. You can also inv
 
 ```
 # Architecture skills trigger on relevant tasks
-"Set up a new Express API with clean architecture"
-"Create a new feature for user authentication using FSD"
+"Set up a new Express API with clean architecture skill"
+"Create a new feature for user authentication using FSD skill"
 
 # Or reference directly
 "Use the postgres-drizzle skill to design my schema"
-"Generate a mermaid diagram showing the data flow"
+"using the mermaid skill generate a diagram showing the data flow"
 ```
 
 ## Skill Overview
