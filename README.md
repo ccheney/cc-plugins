@@ -27,15 +27,6 @@ Production-grade skills that encode battle-tested architectural patterns and bes
 npx skills add ccheney/robust-skills
 ```
 
-### Install a Specific Skill
-
-```bash
-npx skills add ccheney/robust-skills/clean-ddd-hexagonal
-npx skills add ccheney/robust-skills/feature-slicing
-npx skills add ccheney/robust-skills/mermaid-diagrams
-npx skills add ccheney/robust-skills/postgres-drizzle
-```
-
 For more information about the skills CLI, see the [skills.sh documentation](https://skills.sh).
 
 ## Usage
@@ -49,7 +40,7 @@ Once installed, skills activate automatically based on context. You can also inv
 
 # Or reference directly
 "Use the postgres-drizzle skill to design my schema"
-"using the mermaid skill generate a diagram showing the data flow"
+"Using the mermaid skill generate a diagram showing the data flow"
 ```
 
 ## Skill Overview
