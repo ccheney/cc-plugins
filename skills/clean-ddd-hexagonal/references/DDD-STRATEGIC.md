@@ -1,13 +1,50 @@
 # DDD Strategic Patterns
 
 > Sources:
-> - Domain-Driven Design (Eric Evans, 2003)
-> - https://www.domainlanguage.com/ddd/
-> - https://martinfowler.com/bliki/DomainDrivenDesign.html
+> - [Domain-Driven Design: The Blue Book](https://www.domainlanguage.com/ddd/blue-book/) — Eric Evans (2003)
+> - [DDD Resources](https://www.domainlanguage.com/ddd/) — Domain Language (Eric Evans)
+> - [Bounded Context](https://martinfowler.com/bliki/BoundedContext.html) — Martin Fowler
+> - [Domain Driven Design](https://martinfowler.com/bliki/DomainDrivenDesign.html) — Martin Fowler
+> - [Anti-Corruption Layer](https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/acl.html) — AWS
+> - [Domain Analysis for Microservices](https://learn.microsoft.com/en-us/azure/architecture/microservices/model/domain-analysis) — Microsoft
 
 ## Overview
 
 Strategic DDD patterns help decompose large systems into manageable parts with clear boundaries. They answer: **"How do we divide a complex domain?"**
+
+**DDD is fundamentally collaborative.** The patterns below emerge from conversations, whiteboarding, and modeling sessions with domain experts—not from coding alone.
+
+---
+
+## Domain Discovery Techniques
+
+### Event Storming
+
+A workshop technique for discovering domain events, aggregates, and bounded contexts.
+
+```
+Orange sticky: Domain Event (past tense: "OrderPlaced")
+Blue sticky: Command (imperative: "Place Order")
+Yellow sticky: Aggregate (noun: "Order")
+Pink sticky: External System / Policy
+Purple sticky: Problem / Question
+```
+
+**Workshop flow:**
+1. **Chaotic exploration** — Everyone adds events they know about
+2. **Timeline ordering** — Arrange events chronologically
+3. **Identify aggregates** — Group related events
+4. **Find boundaries** — Where language changes = bounded context boundary
+5. **Surface problems** — Mark unclear areas for follow-up
+
+### Context Mapping Workshop
+
+For existing systems, map how bounded contexts currently interact:
+1. List all systems/services
+2. Identify which team owns each
+3. Draw relationships (upstream/downstream)
+4. Label relationship types (ACL, Conformist, etc.)
+5. Identify pain points in current integrations
 
 ---
 
@@ -59,6 +96,8 @@ class Order {
 ## Bounded Contexts
 
 A **semantic boundary** where a particular domain model applies. Within a bounded context, terms have precise, unambiguous meaning.
+
+> **Key insight:** Polysemy (same word, different meanings) across departments is natural, not a problem. The same term meaning different things in different contexts is expected—"the dominant boundary factor is human culture and language variation." — Martin Fowler
 
 ### Key Concepts
 
@@ -279,10 +318,9 @@ import { Money } from '@/domain/shared/money';
 export class StripePaymentACL {
   constructor(private readonly stripe: Stripe) {}
 
-  // Translate our domain model to Stripe's model
   async createPayment(payment: Payment): Promise<string> {
     const paymentIntent = await this.stripe.paymentIntents.create({
-      amount: payment.amount.cents,  // Stripe uses cents
+      amount: payment.amount.cents,
       currency: payment.amount.currency.toLowerCase(),
       metadata: {
         orderId: payment.orderId.value,
@@ -293,7 +331,6 @@ export class StripePaymentACL {
     return paymentIntent.id;
   }
 
-  // Translate Stripe's model to our domain model
   translateStatus(stripeStatus: string): PaymentStatus {
     const mapping: Record<string, PaymentStatus> = {
       'requires_payment_method': PaymentStatus.Pending,
@@ -308,7 +345,6 @@ export class StripePaymentACL {
     return mapping[stripeStatus] ?? PaymentStatus.Unknown;
   }
 
-  // Translate Stripe webhook events to domain events
   translateWebhook(event: Stripe.Event): DomainEvent | null {
     switch (event.type) {
       case 'payment_intent.succeeded':
@@ -318,7 +354,7 @@ export class StripePaymentACL {
           Money.fromCents(intent.amount, intent.currency.toUpperCase())
         );
       case 'payment_intent.payment_failed':
-        // ...
+        return null;
       default:
         return null;
     }
@@ -383,7 +419,6 @@ flowchart TB
 ### Domain Events for Context Integration
 
 ```typescript
-// Sales Context publishes
 interface OrderPlaced {
   eventType: 'sales.order.placed';
   orderId: string;
@@ -394,10 +429,8 @@ interface OrderPlaced {
   occurredAt: string;
 }
 
-// Shipping Context subscribes
 class ShippingOrderPlacedHandler {
   async handle(event: OrderPlaced): Promise<void> {
-    // Translate to shipping context's model
     const shipment = Shipment.create({
       orderId: ShipmentOrderId.from(event.orderId),
       recipient: Recipient.fromAddress(event.shippingAddress),
@@ -408,10 +441,8 @@ class ShippingOrderPlacedHandler {
   }
 }
 
-// Billing Context subscribes
 class BillingOrderPlacedHandler {
   async handle(event: OrderPlaced): Promise<void> {
-    // Translate to billing context's model
     const invoice = Invoice.create({
       orderId: InvoiceOrderId.from(event.orderId),
       customerId: BillingCustomerId.from(event.customerId),

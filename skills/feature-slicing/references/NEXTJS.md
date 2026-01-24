@@ -1,16 +1,14 @@
 # FSD with Next.js Integration
 
-> Source: https://feature-sliced.design/docs/guides/tech/with-nextjs
+> **Source:** [Official Next.js Guide](https://feature-sliced.design/docs/guides/tech/with-nextjs) | [FSD Pure Next.js Template](https://github.com/yunglocokid/FSD-Pure-Next.js-Template)
 
 ## The Challenge
 
-FSD conflicts with Next.js's built-in `app/` and `pages/` folders, which expect file structures matching URL routes. FSD uses flat slice architecture incompatible with Next.js file-based routing.
+FSD conflicts with Next.js's built-in `app/` and `pages/` folders. Both expect specific file structures for routing. FSD uses flat slice architecture.
 
 ## Solution Overview
 
-> **Note:** Next.js ignores `src/app/` if `app/` exists at root. Therefore, we place the entire App Router inside `src/app/` alongside FSD providers, keeping all code in `src/`.
-
-Place the Next.js App Router in `src/app/` (no root `app/` folder). This directory serves double duty: Next.js routing AND the FSD app layer. Re-export page components from FSD `pages/` layer into route files.
+Place the Next.js App Router in `src/app/` (Next.js ignores `src/app/` if root `app/` exists). This directory serves double duty: Next.js routing AND the FSD app layer. Re-export page components from FSD `pages/` layer.
 
 ---
 
@@ -23,7 +21,7 @@ project-root/
 ├── src/
 │   ├── app/                  # Next.js App Router + FSD app layer
 │   │   ├── layout.tsx        # Root layout with providers
-│   │   ├── page.tsx          # Home route → re-exports from pages/
+│   │   ├── page.tsx          # Home → re-exports from pages/
 │   │   ├── products/
 │   │   │   ├── page.tsx
 │   │   │   └── [id]/
@@ -31,12 +29,11 @@ project-root/
 │   │   ├── login/
 │   │   │   └── page.tsx
 │   │   ├── api/              # API routes
-│   │   │   └── ...
 │   │   ├── providers/        # FSD: React context providers
 │   │   │   └── index.tsx
 │   │   └── styles/           # FSD: Global styles
 │   │       └── globals.css
-│   ├── pages/                # FSD pages layer
+│   ├── pages/                # FSD pages layer (NOT Next.js)
 │   │   ├── home/
 │   │   ├── products/
 │   │   ├── product-detail/
@@ -45,14 +42,14 @@ project-root/
 │   ├── features/
 │   ├── entities/
 │   └── shared/
-├── middleware.ts             # Next.js middleware
+├── middleware.ts             # Next.js middleware (root)
 └── next.config.js
 ```
 
 ### Page Re-Export Pattern
 
 ```typescript
-// src/app/page.tsx (Next.js route)
+// src/app/page.tsx
 export { HomePage as default } from '@/pages/home';
 
 // src/app/products/page.tsx
@@ -86,7 +83,7 @@ export function HomePage() {
 export { HomePage } from './ui/HomePage';
 ```
 
-### Root Layout with FSD Providers
+### Root Layout with Providers
 
 ```typescript
 // src/app/layout.tsx
@@ -102,7 +99,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
+```
 
+```typescript
 // src/app/providers/index.tsx
 'use client';
 
@@ -122,7 +121,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 }
 ```
 
-### Server Components with FSD
+### Server Components with Data Fetching
 
 ```typescript
 // src/app/products/[id]/page.tsx
@@ -138,14 +137,13 @@ export default async function Page({ params }: Props) {
   return <ProductDetailPage product={product} />;
 }
 
-// Generate static paths
 export async function generateStaticParams() {
   const products = await getProducts();
   return products.map((product) => ({ id: product.id }));
 }
 ```
 
-### Server Actions
+### Server Actions in Features
 
 ```typescript
 // src/features/auth/api/actions.ts
@@ -166,10 +164,10 @@ export async function loginAction(formData: FormData) {
     return { errors: result.error.flatten().fieldErrors };
   }
 
-  // Call your auth API
   const response = await fetch(`${process.env.API_URL}/auth/login`, {
     method: 'POST',
     body: JSON.stringify(result.data),
+    headers: { 'Content-Type': 'application/json' },
   });
 
   if (!response.ok) {
@@ -177,7 +175,7 @@ export async function loginAction(formData: FormData) {
   }
 
   const { token } = await response.json();
-  cookies().set('token', token, { httpOnly: true });
+  cookies().set('token', token, { httpOnly: true, secure: true });
   redirect('/dashboard');
 }
 ```
@@ -190,7 +188,7 @@ export async function loginAction(formData: FormData) {
 
 ```
 project-root/
-├── pages/                    # Next.js Pages Router
+├── pages/                    # Next.js Pages Router (root)
 │   ├── _app.tsx              # Custom App
 │   ├── _document.tsx
 │   ├── index.tsx             # Home → re-exports from src/pages
@@ -198,14 +196,11 @@ project-root/
 │   │   ├── index.tsx
 │   │   └── [id].tsx
 │   └── api/
-│       └── ...
 ├── src/
 │   ├── app/
 │   │   ├── custom-app/       # _app component
 │   │   └── providers/
-│   ├── pages/
-│   │   ├── home/
-│   │   └── products/
+│   ├── pages/                # FSD pages layer
 │   ├── widgets/
 │   ├── features/
 │   ├── entities/
@@ -233,7 +228,7 @@ export function CustomApp({ Component, pageProps }: AppProps) {
 }
 ```
 
-### Page Re-Exports with getServerSideProps
+### Page with getServerSideProps
 
 ```typescript
 // pages/products/[id].tsx
@@ -250,9 +245,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
     return { notFound: true };
   }
 
-  return {
-    props: { product },
-  };
+  return { props: { product } };
 };
 ```
 
@@ -274,7 +267,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
 
 ---
 
-## API Routes Guidance
+## API Routes
 
 FSD is frontend-focused. For API routes:
 
@@ -289,48 +282,32 @@ src/app/
 │       └── route.ts
 ```
 
-### Option 2: Separate Backend Package (Monorepo)
+### Option 2: Separate Backend (Monorepo)
 
 ```
 packages/
 ├── frontend/          # Next.js + FSD
 │   └── src/
-│       ├── app/       # App Router + FSD app layer
-│       ├── pages/     # FSD pages layer
+│       ├── app/
+│       ├── pages/     # FSD pages
 │       └── ...
 └── backend/           # Express/Fastify
     └── src/
         └── routes/
 ```
 
-### Option 3: Re-export API handlers
-
-```typescript
-// src/app/api-handlers/auth.ts
-import { NextRequest, NextResponse } from 'next/server';
-
-export async function POST(req: NextRequest) {
-  // Auth logic
-}
-
-// src/app/api/auth/route.ts
-export { POST } from '../api-handlers/auth';
-```
-
 ---
 
-## Database & Data Fetching
+## Database Queries
 
-### Database Queries in Shared
+Keep database logic in `shared/db/`:
 
 ```typescript
 // shared/db/client.ts
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
-const connectionString = process.env.DATABASE_URL!;
-const client = postgres(connectionString);
-
+const client = postgres(process.env.DATABASE_URL!);
 export const db = drizzle(client);
 ```
 
@@ -338,6 +315,7 @@ export const db = drizzle(client);
 // shared/db/queries/products.ts
 import { db } from '../client';
 import { products } from '../schema';
+import { eq } from 'drizzle-orm';
 
 export async function getAllProducts() {
   return db.select().from(products);
@@ -348,20 +326,17 @@ export async function getProductById(id: string) {
 }
 ```
 
-### Entity API Using Shared DB
-
 ```typescript
 // entities/product/api/productApi.ts
 import { getAllProducts, getProductById as dbGetProduct } from '@/shared/db/queries/products';
 import { mapProductRow } from '../model/mapper';
-import type { Product } from '../model/types';
 
-export async function getProducts(): Promise<Product[]> {
+export async function getProducts() {
   const rows = await getAllProducts();
   return rows.map(mapProductRow);
 }
 
-export async function getProductById(id: string): Promise<Product | null> {
+export async function getProductById(id: string) {
   const [row] = await dbGetProduct(id);
   return row ? mapProductRow(row) : null;
 }
@@ -369,7 +344,7 @@ export async function getProductById(id: string): Promise<Product | null> {
 
 ---
 
-## Middleware Integration
+## Middleware
 
 ```typescript
 // middleware.ts
@@ -379,9 +354,9 @@ import type { NextRequest } from 'next/server';
 export function middleware(request: NextRequest) {
   const token = request.cookies.get('token')?.value;
   const isAuthPage = request.nextUrl.pathname.startsWith('/login');
-  const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard');
+  const isProtected = request.nextUrl.pathname.startsWith('/dashboard');
 
-  if (isProtectedRoute && !token) {
+  if (isProtected && !token) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
@@ -410,17 +385,6 @@ import { ProductListSkeleton } from '@/widgets/product-list';
 export default function Loading() {
   return <ProductListSkeleton />;
 }
-
-// widgets/product-list/ui/ProductListSkeleton.tsx
-export function ProductListSkeleton() {
-  return (
-    <div className="grid grid-cols-3 gap-4">
-      {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className="h-64 bg-gray-200 animate-pulse rounded-lg" />
-      ))}
-    </div>
-  );
-}
 ```
 
 ### Error Boundaries
@@ -448,13 +412,43 @@ export default function Error({
 }
 ```
 
+### Not Found
+
+```typescript
+// src/app/products/[id]/not-found.tsx
+import Link from 'next/link';
+
+export default function NotFound() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen">
+      <h2 className="text-xl font-bold mb-4">Product Not Found</h2>
+      <Link href="/products" className="text-blue-600 hover:underline">
+        Back to Products
+      </Link>
+    </div>
+  );
+}
+```
+
 ---
 
 ## Best Practices
 
-1. **Keep Next.js routes thin** - Only re-exports and data fetching
-2. **All UI logic in FSD layers** - Components, state, business logic
-3. **Use path aliases** - Clean imports across layers
-4. **Server Components default** - Add `'use client'` only when needed
-5. **Colocate server actions** - In feature's `api/` segment with `'use server'`
-6. **Shared DB queries** - Keep database logic in `shared/db/`
+1. **Keep Next.js routes thin** — Only re-exports and data fetching
+2. **All UI logic in FSD layers** — Components, state, business logic
+3. **Use path aliases** — Clean imports across layers
+4. **Server Components default** — Add `'use client'` only when needed
+5. **Colocate server actions** — In feature's `api/` segment with `'use server'`
+6. **Shared DB queries** — Keep database logic in `shared/db/`
+7. **Middleware at root** — Authentication, redirects, headers
+
+---
+
+## Resources
+
+| Resource | Link |
+|----------|------|
+| Official Guide | [feature-sliced.design/docs/guides/tech/with-nextjs](https://feature-sliced.design/docs/guides/tech/with-nextjs) |
+| FSD Pure Template | [github.com/yunglocokid/FSD-Pure-Next.js-Template](https://github.com/yunglocokid/FSD-Pure-Next.js-Template) |
+| i18n Example | [github.com/nikolay-malygin/i18n-Next.js-14-FSD](https://github.com/nikolay-malygin/i18n-Next.js-14-FSD) |
+| App Router Guide | [dev.to/m_midas](https://dev.to/m_midas/how-to-deal-with-nextjs-using-feature-sliced-design-4c67) |

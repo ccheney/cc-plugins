@@ -1,8 +1,9 @@
 # Layer Structure - Complete Reference
 
 > Sources:
-> - https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html
-> - https://learn.microsoft.com/en-us/dotnet/architecture/microservices/microservice-ddd-cqrs-patterns/ddd-oriented-microservice
+> - [The Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html) — Robert C. Martin
+> - [Designing a DDD-oriented Microservice](https://learn.microsoft.com/en-us/dotnet/architecture/microservices/microservice-ddd-cqrs-patterns/ddd-oriented-microservice) — Microsoft
+> - [Clean Architecture: Standing on the Shoulders of Giants](https://herbertograca.com/2017/09/28/clean-architecture-standing-on-the-shoulders-of-giants/) — Herberto Graça
 
 ## The Four Layers
 
@@ -169,15 +170,12 @@ export class PlaceOrderHandler implements IPlaceOrderUseCase {
   ) {}
 
   async execute(command: PlaceOrderCommand): Promise<OrderId> {
-    // Start transaction
     await this.uow.begin();
 
     try {
-      // Create order aggregate
       const orderId = OrderId.generate();
       const order = Order.create(orderId, command.customerId);
 
-      // Add items (domain validates business rules)
       for (const item of command.items) {
         const product = await this.productRepo.findById(item.productId);
         if (!product) {
@@ -186,13 +184,8 @@ export class PlaceOrderHandler implements IPlaceOrderUseCase {
         order.addItem(product, item.quantity);
       }
 
-      // Persist aggregate
       await this.orderRepo.save(order);
-
-      // Commit transaction
       await this.uow.commit();
-
-      // Publish domain events (after commit)
       await this.eventPublisher.publishAll(order.domainEvents);
 
       return orderId;
@@ -293,68 +286,27 @@ infrastructure/
 
 ### Example: Repository Implementation
 
-```typescript
-// infrastructure/persistence/postgres/order_repository.ts
-import { Pool } from 'pg';
-import { Order } from '@/domain/order/order';
-import { OrderId } from '@/domain/order/value_objects';
-import { IOrderRepository } from '@/domain/order/repository';
-import { OrderMapper } from './mappers/order_mapper';
+```
+class PostgresOrderRepository implements IOrderRepository:
+    db: Database
 
-export class PostgresOrderRepository implements IOrderRepository {
-  constructor(private readonly pool: Pool) {}
+    findById(id: OrderId) -> Order | null:
+        row = db.orders
+            .where(id: id.value)
+            .withRelated("items")
+            .first()
 
-  async findById(id: OrderId): Promise<Order | null> {
-    const result = await this.pool.query(
-      `SELECT o.*,
-              json_agg(json_build_object(
-                'id', oi.id,
-                'product_id', oi.product_id,
-                'quantity', oi.quantity,
-                'unit_price', oi.unit_price
-              )) as items
-       FROM orders o
-       LEFT JOIN order_items oi ON o.id = oi.order_id
-       WHERE o.id = $1
-       GROUP BY o.id`,
-      [id.value]
-    );
+        if not row:
+            return null
 
-    if (result.rows.length === 0) {
-      return null;
-    }
+        return OrderMapper.toDomain(row)
 
-    return OrderMapper.toDomain(result.rows[0]);
-  }
+    save(order: Order):
+        data = OrderMapper.toPersistence(order)
+        db.orders.upsert(data)
 
-  async save(order: Order): Promise<void> {
-    const data = OrderMapper.toPersistence(order);
-
-    await this.pool.query(
-      `INSERT INTO orders (id, customer_id, status, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (id) DO UPDATE SET
-         status = EXCLUDED.status,
-         updated_at = EXCLUDED.updated_at`,
-      [data.id, data.customerId, data.status, data.createdAt, data.updatedAt]
-    );
-
-    // Upsert items
-    for (const item of data.items) {
-      await this.pool.query(
-        `INSERT INTO order_items (id, order_id, product_id, quantity, unit_price)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (id) DO UPDATE SET
-           quantity = EXCLUDED.quantity`,
-        [item.id, data.id, item.productId, item.quantity, item.unitPrice]
-      );
-    }
-  }
-
-  async delete(order: Order): Promise<void> {
-    await this.pool.query('DELETE FROM orders WHERE id = $1', [order.id.value]);
-  }
-}
+    delete(order: Order):
+        db.orders.where(id: order.id.value).delete()
 ```
 
 ---
@@ -406,7 +358,6 @@ export class OrderController {
     try {
       const request = req.body as PlaceOrderRequest;
 
-      // Map HTTP request to application command
       const orderId = await this.placeOrder.execute({
         customerId: req.user.id,
         items: request.items.map(item => ({
@@ -485,53 +436,30 @@ flowchart TB
 All dependencies are wired together at the application entry point.
 
 ```typescript
-// main.ts (composition root)
 import { Pool } from 'pg';
 import { Container } from 'inversify';
-
-// Domain interfaces
 import { IOrderRepository } from '@/domain/order/repository';
 import { IProductRepository } from '@/domain/product/repository';
-
-// Application ports
 import { IPlaceOrderUseCase } from '@/application/orders/place_order/port';
 import { IUnitOfWork } from '@/application/shared/unit_of_work';
 import { IEventPublisher } from '@/application/shared/event_publisher';
-
-// Application handlers
 import { PlaceOrderHandler } from '@/application/orders/place_order/handler';
-
-// Infrastructure implementations
 import { PostgresOrderRepository } from '@/infrastructure/persistence/postgres/order_repository';
 import { PostgresProductRepository } from '@/infrastructure/persistence/postgres/product_repository';
 import { PostgresUnitOfWork } from '@/infrastructure/persistence/postgres/unit_of_work';
 import { RabbitMQEventPublisher } from '@/infrastructure/messaging/rabbitmq/event_publisher';
-
-// Presentation
 import { OrderController } from '@/presentation/rest/controllers/order_controller';
 
 export function configureContainer(): Container {
   const container = new Container();
-
-  // Database
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
   container.bind<Pool>('Pool').toConstantValue(pool);
-
-  // Repositories
-  container.bind<IOrderRepository>('IOrderRepository')
-    .to(PostgresOrderRepository);
-  container.bind<IProductRepository>('IProductRepository')
-    .to(PostgresProductRepository);
-
-  // Infrastructure services
+  container.bind<IOrderRepository>('IOrderRepository').to(PostgresOrderRepository);
+  container.bind<IProductRepository>('IProductRepository').to(PostgresProductRepository);
   container.bind<IUnitOfWork>('IUnitOfWork').to(PostgresUnitOfWork);
   container.bind<IEventPublisher>('IEventPublisher').to(RabbitMQEventPublisher);
-
-  // Use cases
-  container.bind<IPlaceOrderUseCase>('IPlaceOrderUseCase')
-    .to(PlaceOrderHandler);
-
-  // Controllers
+  container.bind<IPlaceOrderUseCase>('IPlaceOrderUseCase').to(PlaceOrderHandler);
   container.bind<OrderController>(OrderController).toSelf();
 
   return container;

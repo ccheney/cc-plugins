@@ -1,9 +1,13 @@
 # CQRS & Domain Events
 
 > Sources:
-> - https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs
-> - https://microservices.io/patterns/data/event-sourcing.html
-> - https://martinfowler.com/bliki/CQRS.html
+> - [CQRS](https://martinfowler.com/bliki/CQRS.html) — Martin Fowler
+> - [Event Sourcing](https://martinfowler.com/eaaDev/EventSourcing.html) — Martin Fowler
+> - [CQRS Pattern](https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs) — Microsoft Azure
+> - [Transactional Outbox](https://microservices.io/patterns/data/transactional-outbox.html) — microservices.io
+> - [Domain Events – Salvation](https://udidahan.com/2009/06/14/domain-events-salvation/) — Udi Dahan
+> - [Strengthening Your Domain: Domain Events](https://lostechies.com/jimmybogard/2010/04/08/strengthening-your-domain-domain-events/) — Jimmy Bogard
+> - [Domain Events: Design and Implementation](https://learn.microsoft.com/en-us/dotnet/architecture/microservices/microservice-ddd-cqrs-patterns/domain-events-design-implementation) — Microsoft
 
 ## CQRS Overview
 
@@ -74,22 +78,16 @@ export interface CancelOrderCommand {
   reason: string;
 }
 
-// Command handler
 export class PlaceOrderHandler {
   async handle(command: PlaceOrderCommand): Promise<OrderId> {
-    // 1. Load/create aggregate
     const order = Order.create(CustomerId.from(command.customerId));
 
-    // 2. Execute business logic
     for (const item of command.items) {
       const product = await this.productRepo.findById(item.productId);
       order.addItem(product.id, item.quantity, product.price);
     }
 
-    // 3. Persist aggregate
     await this.orderRepo.save(order);
-
-    // 4. Publish domain events
     await this.eventPublisher.publishAll(order.domainEvents);
 
     return order.id;
@@ -114,15 +112,14 @@ export interface GetOrdersByCustomerQuery {
   pageSize?: number;
 }
 
-// Query result (DTO, not domain object)
 export interface OrderDTO {
   id: string;
   customerId: string;
-  customerName: string;  // Denormalized for read
+  customerName: string;
   status: string;
   items: Array<{
     productId: string;
-    productName: string;  // Denormalized
+    productName: string;
     quantity: number;
     unitPrice: number;
     subtotal: number;
@@ -132,12 +129,10 @@ export interface OrderDTO {
   confirmedAt?: string;
 }
 
-// Query handler (bypasses domain model)
 export class GetOrderHandler {
   constructor(private readonly readDb: IOrderReadModel) {}
 
   async handle(query: GetOrderQuery): Promise<OrderDTO | null> {
-    // Query optimized read model directly
     return this.readDb.findById(query.orderId);
   }
 }
@@ -162,56 +157,26 @@ export class GetOrdersByCustomerHandler {
 
 Optimized database structure for queries. Can denormalize data for performance.
 
-```typescript
-// infrastructure/read_models/order_read_model.ts
-export interface IOrderReadModel {
-  findById(orderId: string): Promise<OrderDTO | null>;
-  findByCustomer(
-    customerId: string,
-    status?: OrderStatus,
-    page?: number,
-    pageSize?: number
-  ): Promise<PaginatedResult<OrderDTO>>;
-  search(criteria: OrderSearchCriteria): Promise<OrderDTO[]>;
-}
-
-export class PostgresOrderReadModel implements IOrderReadModel {
-  constructor(private readonly pool: Pool) {}
-
-  async findById(orderId: string): Promise<OrderDTO | null> {
-    // Optimized query joining all needed data
-    const result = await this.pool.query(`
-      SELECT
-        o.id,
-        o.status,
-        o.total,
-        o.created_at,
-        o.confirmed_at,
-        c.id as customer_id,
-        c.name as customer_name,
-        json_agg(json_build_object(
-          'productId', oi.product_id,
-          'productName', p.name,
-          'quantity', oi.quantity,
-          'unitPrice', oi.unit_price,
-          'subtotal', oi.quantity * oi.unit_price
-        )) as items
-      FROM orders_read o
-      JOIN customers c ON o.customer_id = c.id
-      LEFT JOIN order_items_read oi ON o.id = oi.order_id
-      LEFT JOIN products p ON oi.product_id = p.id
-      WHERE o.id = $1
-      GROUP BY o.id, c.id
-    `, [orderId]);
-
-    return result.rows[0] ? this.mapToDTO(result.rows[0]) : null;
-  }
-}
-
-// Separate write and read databases (optional)
-// Write: Normalized, optimized for transactions
-// Read: Denormalized, optimized for queries
 ```
+interface IOrderReadModel:
+    findById(orderId: string) -> OrderDTO | null
+    findByCustomer(customerId, status?, page?, pageSize?) -> PaginatedResult<OrderDTO>
+    search(criteria: OrderSearchCriteria) -> List<OrderDTO>
+
+class PostgresOrderReadModel implements IOrderReadModel:
+    db: Database
+
+    findById(orderId: string) -> OrderDTO | null:
+        row = db.ordersRead
+            .where(id: orderId)
+            .join("customer")
+            .withRelated("items.product")
+            .first()
+
+        return row ? this.mapToDTO(row) : null
+```
+
+Separate write and read databases (optional): write is normalized for transactions, read is denormalized for queries.
 
 ---
 
@@ -303,35 +268,30 @@ export class OrderShipped extends DomainEvent {
 
 ### Event Handlers
 
-```typescript
-// application/event_handlers/order_event_handlers.ts
+```
+class OrderCreatedHandler:
+    db: Database
 
-// Update read model when order is created
-export class OrderCreatedHandler {
-  constructor(private readonly readDb: Pool) {}
+    handle(event: OrderCreated):
+        db.ordersRead.insert({
+            id: event.orderId.value,
+            customerId: event.customerId.value,
+            status: "draft",
+            createdAt: event.occurredAt
+        })
 
-  async handle(event: OrderCreated): Promise<void> {
-    await this.readDb.query(`
-      INSERT INTO orders_read (id, customer_id, status, created_at)
-      VALUES ($1, $2, 'draft', $3)
-    `, [event.orderId.value, event.customerId.value, event.occurredAt]);
-  }
-}
+class OrderConfirmedHandler:
+    db: Database
 
-// Update read model when order is confirmed
-export class OrderConfirmedHandler {
-  constructor(private readonly readDb: Pool) {}
+    handle(event: OrderConfirmed):
+        db.ordersRead
+            .where(id: event.orderId.value)
+            .update({
+                status: "confirmed",
+                total: event.total.amount,
+                confirmedAt: event.occurredAt
+            })
 
-  async handle(event: OrderConfirmed): Promise<void> {
-    await this.readDb.query(`
-      UPDATE orders_read
-      SET status = 'confirmed', total = $2, confirmed_at = $3
-      WHERE id = $1
-    `, [event.orderId.value, event.total.amount, event.occurredAt]);
-  }
-}
-
-// Send notification when order ships
 export class SendShippingNotificationHandler {
   constructor(
     private readonly orderRepo: IOrderRepository,
@@ -366,7 +326,6 @@ export class SendShippingNotificationHandler {
 - Named in domain language
 
 ```typescript
-// Within Order bounded context
 class OrderItemQuantityIncreased extends DomainEvent {
   constructor(
     readonly orderId: OrderId,
@@ -385,7 +344,6 @@ class OrderItemQuantityIncreased extends DomainEvent {
 - Versioned schema
 
 ```typescript
-// Published to other bounded contexts
 interface OrderConfirmedIntegrationEvent {
   eventType: 'sales.order.confirmed';
   eventId: string;
@@ -424,7 +382,6 @@ export class PublishOrderConfirmedIntegrationEvent {
     const order = await this.orderRepo.findById(domainEvent.orderId);
     if (!order) return;
 
-    // Map domain event to integration event
     const integrationEvent: OrderConfirmedIntegrationEvent = {
       eventType: 'sales.order.confirmed',
       eventId: crypto.randomUUID(),
@@ -492,7 +449,6 @@ export class EventDispatcher {
   }
 }
 
-// Setup
 const dispatcher = new EventDispatcher();
 dispatcher.register('order.created', new OrderCreatedHandler(readDb));
 dispatcher.register('order.confirmed', new OrderConfirmedHandler(readDb));
@@ -506,121 +462,104 @@ dispatcher.register('order.shipped', new SendShippingNotificationHandler(orderRe
 
 Ensures events are published reliably (exactly-once semantics).
 
-```typescript
-// infrastructure/persistence/outbox.ts
-interface OutboxMessage {
-  id: string;
-  eventType: string;
-  payload: string;
-  createdAt: Date;
-  processedAt: Date | null;
-}
+```
+interface OutboxMessage:
+    id: string
+    eventType: string
+    payload: string
+    createdAt: DateTime
+    processedAt: DateTime | null
 
-export class OutboxRepository {
-  constructor(private readonly pool: Pool) {}
+class OutboxRepository:
+    db: Database
 
-  async save(event: DomainEvent, tx: PoolClient): Promise<void> {
-    await tx.query(`
-      INSERT INTO outbox (id, event_type, payload, created_at)
-      VALUES ($1, $2, $3, $4)
-    `, [
-      event.eventId,
-      event.eventType,
-      JSON.stringify(event.toPayload()),
-      event.occurredAt,
-    ]);
-  }
+    save(event: DomainEvent, tx: Transaction):
+        tx.outbox.insert({
+            id: event.eventId,
+            eventType: event.eventType,
+            payload: serialize(event.toPayload()),
+            createdAt: event.occurredAt
+        })
 
-  async getUnprocessed(limit: number = 100): Promise<OutboxMessage[]> {
-    const result = await this.pool.query(`
-      SELECT * FROM outbox
-      WHERE processed_at IS NULL
-      ORDER BY created_at
-      LIMIT $1
-      FOR UPDATE SKIP LOCKED
-    `, [limit]);
-    return result.rows;
-  }
+    getUnprocessed(limit: int = 100) -> List<OutboxMessage>:
+        return db.outbox
+            .where(processedAt: null)
+            .orderBy("createdAt")
+            .limit(limit)
+            .lockForUpdate()
 
-  async markProcessed(id: string): Promise<void> {
-    await this.pool.query(`
-      UPDATE outbox SET processed_at = NOW() WHERE id = $1
-    `, [id]);
-  }
-}
+    markProcessed(id: string):
+        db.outbox.where(id: id).update({processedAt: now()})
 
-// Command handler with outbox
-export class PlaceOrderHandler {
-  async handle(command: PlaceOrderCommand): Promise<OrderId> {
-    const order = Order.create(CustomerId.from(command.customerId));
-    // ... add items ...
+class PlaceOrderHandler:
+    orderRepo: IOrderRepository
+    outbox: OutboxRepository
+    db: Database
 
-    // Save aggregate AND events in same transaction
-    await this.pool.transaction(async (tx) => {
-      await this.orderRepo.save(order, tx);
+    handle(command: PlaceOrderCommand) -> OrderId:
+        order = Order.create(CustomerId.from(command.customerId))
 
-      // Save events to outbox (same transaction)
-      for (const event of order.domainEvents) {
-        await this.outbox.save(event, tx);
-      }
-    });
+        db.transaction((tx) => {
+            orderRepo.save(order, tx)
+            for event in order.domainEvents:
+                outbox.save(event, tx)
+        })
 
-    return order.id;
-  }
-}
+        return order.id
 
-// Background worker publishes from outbox
-export class OutboxProcessor {
-  async process(): Promise<void> {
-    const messages = await this.outbox.getUnprocessed();
+class OutboxProcessor:
+    outbox: OutboxRepository
+    messageBroker: IMessageBroker
 
-    for (const message of messages) {
-      try {
-        await this.messageBroker.publish(message.eventType, message.payload);
-        await this.outbox.markProcessed(message.id);
-      } catch (error) {
-        // Will retry on next iteration
-        console.error(`Failed to process outbox message ${message.id}`, error);
-      }
-    }
-  }
-}
+    process():
+        messages = outbox.getUnprocessed()
+
+        for message in messages:
+            try:
+                messageBroker.publish(message.eventType, message.payload)
+                outbox.markProcessed(message.id)
+            catch error:
+                log.error("Failed to process outbox message", message.id)
 ```
 
 ---
 
 ## When to Use CQRS
 
+> **Warning:** "You should be very cautious about using CQRS... the majority of cases I've run into have not been so good." — Martin Fowler
+
+CQRS adds significant complexity. Most applications don't need it.
+
 ### Use CQRS When:
 
-- Read and write workloads have different scaling requirements
-- Complex queries that don't map well to domain model
-- Different teams work on read vs write
-- Event sourcing is used
-- Performance optimization needed for reads
+- Read and write workloads have **dramatically** different scaling requirements
+- Complex queries that genuinely don't map well to domain model
+- Different teams work on read vs write sides
+- Event sourcing is used (CQRS pairs naturally with ES)
+- You've proven simpler approaches are insufficient
 
 ### Skip CQRS When:
 
-- Simple CRUD application
+- Simple CRUD application (most applications)
 - Read/write patterns are similar
 - Small team, simple domain
-- Adding unnecessary complexity
+- You haven't tried a simple reporting database first
+- Adding it "just in case"
 
-### Simplified CQRS
+**CQRS applies to specific bounded contexts, never entire systems.**
+
+### Simplified CQRS (Start Here)
 
 Start simple—same database, different query paths:
 
 ```typescript
-// Same database, but separate query path
 class OrderService {
-  // Write (through domain)
   async placeOrder(cmd: PlaceOrderCommand): Promise<OrderId> {
     const order = Order.create(...);
     await this.orderRepo.save(order);
     return order.id;
   }
 
-  // Read (bypass domain, query directly)
   async getOrder(id: string): Promise<OrderDTO | null> {
     return this.readModel.findById(id);
   }
@@ -628,3 +567,73 @@ class OrderService {
 ```
 
 Evolve to separate databases only when needed.
+
+---
+
+## Event Sourcing: Critical Considerations
+
+> **Warning:** "Extremely difficult to add Event Sourcing to systems not originally designed for it." — Martin Fowler
+
+### When Event Sourcing Makes Sense
+
+- Complete audit trail is a business requirement
+- Need to reconstruct state at any point in time
+- Domain is inherently event-driven (financial transactions, workflows)
+- Debugging requires understanding "how did we get here?"
+
+### When to Avoid Event Sourcing
+
+- Simple CRUD with no audit requirements
+- Team unfamiliar with event-driven patterns
+- Adding it retroactively to existing system
+- No clear business need for temporal queries
+
+### Event Sourcing Requirements
+
+1. **Events must store deltas** — Not final state, but what changed (enables reversal)
+2. **Snapshots for performance** — Rebuild from snapshots, not from event 0
+3. **External system handling:**
+   - Disable notifications during replays
+   - Cache external query results with timestamps
+4. **Schema evolution strategy** — Events are forever; plan for versioning
+
+---
+
+## Saga Pattern (Cross-Aggregate Workflows)
+
+For workflows spanning multiple aggregates, use sagas instead of trying to coordinate via raw domain events.
+
+```
+Saga: PlaceOrderSaga
+├── Step 1: Reserve inventory (Inventory aggregate)
+├── Step 2: Process payment (Payment aggregate)
+├── Step 3: Confirm order (Order aggregate)
+└── Compensating actions if any step fails
+```
+
+**Saga types:**
+- **Choreography:** Each service listens/publishes events (simpler, harder to trace)
+- **Orchestration:** Central coordinator manages steps (explicit, easier to debug)
+
+---
+
+## Idempotent Consumer Pattern
+
+**Required for reliable event processing.** Messages may be delivered more than once.
+
+```
+class OrderConfirmedHandler:
+    processedIds: Set<string>
+
+    handle(event: OrderConfirmed):
+        if event.eventId in processedIds:
+            return
+
+        doWork(event)
+        processedIds.add(event.eventId)
+```
+
+**Implementation options:**
+- Store processed message IDs in database
+- Use message broker's deduplication features
+- Design handlers to be naturally idempotent

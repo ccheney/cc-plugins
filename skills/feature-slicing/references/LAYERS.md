@@ -1,35 +1,36 @@
-# FSD Layers - Complete Reference
+# FSD Layers Reference
 
-> Source: https://feature-sliced.design/docs/reference/layers
+> **Source:** [Layers Reference](https://feature-sliced.design/docs/reference/layers) | [FSD Overview](https://feature-sliced.design/docs/get-started/overview)
 
 ## Layer Hierarchy
 
-Arranged from highest to lowest responsibility and dependency:
+Arranged from highest to lowest responsibility. Each layer can only import from layers below it.
 
-| Layer | Purpose | Has Slices | Optional |
+| Layer | Purpose | Has Slices | Required |
 |-------|---------|------------|----------|
-| `app/` | Application initialization, providers, routing | No | No |
-| `processes/` | Cross-page workflows (DEPRECATED) | Yes | Yes |
-| `pages/` | Route-based screens | Yes | No |
-| `widgets/` | Complex reusable UI blocks | Yes | Yes |
-| `features/` | User interactions with business value | Yes | Yes |
-| `entities/` | Business domain models | Yes | Yes |
-| `shared/` | Reusable infrastructure | No | No |
+| `app/` | Application initialization, providers, routing | No | Yes |
+| `pages/` | Route-based screens | Yes | Yes |
+| `widgets/` | Complex reusable UI blocks | Yes | No |
+| `features/` | User interactions with business value | Yes | No |
+| `entities/` | Business domain models | Yes | No |
+| `shared/` | Reusable infrastructure | No | Yes |
 
-## The Import Rule
+**Note:** `processes/` layer is DEPRECATED. Use pages with composition instead.
 
-**Critical constraint:** A module can only import from layers strictly below it.
+---
+
+## Import Rule
 
 ```
-app/      → can import from: pages, widgets, features, entities, shared
-pages/    → can import from: widgets, features, entities, shared
-widgets/  → can import from: features, entities, shared
-features/ → can import from: entities, shared
-entities/ → can import from: shared
-shared/   → can import from: external packages only
+app/      → can import: pages, widgets, features, entities, shared
+pages/    → can import: widgets, features, entities, shared
+widgets/  → can import: features, entities, shared
+features/ → can import: entities, shared
+entities/ → can import: shared (use @x for cross-entity)
+shared/   → can import: external packages only
 ```
 
-**Exception:** `app/` and `shared/` don't have slices, so internal cross-imports are allowed within them.
+**Exception:** `app/` and `shared/` have no slices, so internal cross-segment imports are allowed.
 
 ---
 
@@ -37,51 +38,54 @@ shared/   → can import from: external packages only
 
 ### Shared Layer
 
-The foundation layer establishing external connections and internal libraries **without business domain knowledge**.
+> [Shared Layer Docs](https://feature-sliced.design/docs/reference/layers#shared)
 
-**Typical segments:**
+Foundation layer for external connections and utilities. **No business domain knowledge.**
 
+**Segments:**
 ```
 shared/
 ├── api/           # Backend client, request functions, interceptors
-├── ui/            # Business-agnostic UI components (buttons, inputs, modals)
-├── lib/           # Focused utilities (dates, colors, text, validation)
-├── config/        # Environment variables, feature flags, constants
+├── ui/            # Business-agnostic UI (buttons, inputs, modals)
+├── lib/           # Focused utilities (dates, colors, validation)
+├── config/        # Environment variables, feature flags
 ├── routes/        # Route path constants
-├── i18n/          # Translation setup, language files
-└── types/         # Global TypeScript types
+├── i18n/          # Translation setup
+└── types/         # Global TypeScript types (utility types)
 ```
 
 **Guidelines:**
-- Avoid generic names like `components/`, `hooks/`, `utils/`
+- Avoid generic names: `components/`, `hooks/`, `utils/`
 - Use purpose-driven segment names
-- No business logic or domain knowledge
 - Should be extractable to a separate package
+- NO domain logic
 
-**Example - API Client:**
-
-See: [API client example](../examples/shared/api-client.ts)
+**TypeScript Types:**
+- Utility types → `shared/lib/utility-types`
+- DTOs → `shared/api` near request functions
+- Avoid generic `shared/types` folder
 
 ---
 
 ### Entities Layer
 
-Represents real-world business concepts the application works with.
+> [Entities Layer Docs](https://feature-sliced.design/docs/reference/layers#entities)
 
-**Typical structure:**
+Real-world business concepts the application works with.
 
+**Structure:**
 ```
 entities/
 ├── user/
 │   ├── ui/           # UserAvatar, UserCard, UserBadge
-│   ├── api/          # getUser, updateUser
-│   ├── model/        # User types, validation schemas, store
-│   ├── lib/          # formatUserName, calculateUserAge
+│   ├── api/          # getUser, updateUser, queries
+│   ├── model/        # User types, validation, store
+│   ├── lib/          # formatUserName, calculateAge
 │   └── index.ts      # Public API
 ├── product/
-│   ├── ui/           # ProductCard, ProductImage
-│   ├── api/          # getProducts, getProductById
-│   ├── model/        # Product types, schemas
+│   ├── ui/
+│   ├── api/
+│   ├── model/
 │   └── index.ts
 └── order/
     └── ...
@@ -90,58 +94,66 @@ entities/
 **What belongs here:**
 - Data models and TypeScript interfaces
 - API functions for CRUD operations
-- Reusable UI representations of entities
+- Reusable UI representations
 - Validation schemas (Zod, Yup)
-- Entity-specific utilities
+- Entity-specific mappers (DTO → Domain)
 
 **What doesn't belong:**
-- User interactions (features)
-- Page layouts (pages)
-- Complex composed UI (widgets)
+- User interactions (→ features)
+- Page layouts (→ pages)
+- Composed UI blocks (→ widgets)
 
-**Cross-Entity References with `@x` Notation:**
+**Cross-Entity References (@x Notation):**
 
-When entities need to reference each other (e.g., Order references Product):
+> [Cross-Imports @x Notation](https://feature-sliced.design/docs/reference/public-api#public-api-for-cross-imports)
+
+When entities must reference each other:
 
 ```
 entities/
 ├── product/
 │   ├── @x/
-│   │   └── order.ts    # Special API for order entity
+│   │   └── order.ts    # API for order entity only
 │   └── index.ts
 └── order/
-    └── model/
-        └── types.ts    # imports from entities/product/@x/order
+    └── model/types.ts  # imports from product/@x/order
 ```
 
-See [PUBLIC-API.md](PUBLIC-API.md#cross-imports-with-x-notation) for detailed @x notation patterns.
+```typescript
+// entities/product/@x/order.ts
+export type { ProductId, ProductName } from '../model/types';
+
+// entities/order/model/types.ts
+import type { ProductId } from '@/entities/product/@x/order';
+```
 
 ---
 
 ### Features Layer
 
-Implements user-facing interactions that provide business value.
+> [Features Layer Docs](https://feature-sliced.design/docs/reference/layers#features)
 
-**Key principle:** Not everything needs to be a feature. Reserve this layer for reused interactions.
+User-facing interactions that provide business value.
 
-**Typical structure:**
+**Key principle:** Not everything is a feature. Per [FSD v2.1](https://github.com/feature-sliced/documentation/releases/tag/v2.1), keep non-reused interactions in page slices.
 
+**Structure:**
 ```
 features/
-├── add-to-cart/
-│   ├── ui/           # AddToCartButton, QuantitySelector
-│   ├── api/          # addToCart mutation
-│   ├── model/        # validation, local state
-│   └── index.ts
 ├── auth/
 │   ├── ui/           # LoginForm, LogoutButton
 │   ├── api/          # login, logout, register
-│   ├── model/        # auth state, session management
+│   ├── model/        # auth state, session, schemas
+│   └── index.ts
+├── add-to-cart/
+│   ├── ui/           # AddToCartButton, QuantitySelector
+│   ├── api/          # addToCart mutation
+│   ├── model/        # validation
 │   └── index.ts
 └── search-products/
-    ├── ui/           # SearchInput, SearchFilters
+    ├── ui/           # SearchInput, Filters
     ├── api/          # searchProducts
-    ├── model/        # search state, filters
+    ├── model/        # search state
     └── index.ts
 ```
 
@@ -149,34 +161,35 @@ features/
 
 | Entity | Feature |
 |--------|---------|
-| Represents a thing | Represents an action |
-| `user` - the user data | `auth` - login/logout actions |
-| `product` - product info | `add-to-cart` - adding product to cart |
-| `comment` - comment data | `write-comment` - creating a comment |
+| Represents a THING | Represents an ACTION |
+| `user` — user data | `auth` — login/logout |
+| `product` — product info | `add-to-cart` — adding |
+| `comment` — comment data | `write-comment` — creating |
 
 ---
 
 ### Widgets Layer
 
+> [Widgets Layer Docs](https://feature-sliced.design/docs/reference/layers#widgets)
+
 Large, self-sufficient UI components reused across multiple pages.
 
-**Criteria for using widgets:**
+**When to use widgets:**
 - Component is reused across multiple pages
-- Component is complex with multiple child components
+- Component is complex with multiple children
 - Component delivers a complete use case
 
-**Typical structure:**
-
+**Structure:**
 ```
 widgets/
 ├── header/
 │   ├── ui/           # Header, NavMenu, UserDropdown
 │   └── index.ts
 ├── sidebar/
-│   ├── ui/           # Sidebar, SidebarItem, SidebarSection
+│   ├── ui/           # Sidebar, SidebarItem
 │   └── index.ts
 └── product-list/
-    ├── ui/           # ProductList, ProductGrid, ProductFilters
+    ├── ui/           # ProductList, ProductGrid, Filters
     └── index.ts
 ```
 
@@ -184,52 +197,63 @@ widgets/
 - Widget = composed UI block (visual)
 - Feature = user interaction (behavioral)
 
-A widget often contains multiple features:
+Widgets often compose multiple features:
+```tsx
+// widgets/header/ui/Header.tsx
+import { UserAvatar } from '@/entities/user';
+import { LogoutButton } from '@/features/auth';
+import { SearchBox } from '@/features/search';
+```
 
-See: [Header widget example](../examples/widgets/header.tsx)
+**Don't create widgets for:**
+- Single-use components (keep in page)
+- Simple compositions (compose in page directly)
 
 ---
 
 ### Pages Layer
 
-Individual screens or routes in the application.
+> [Pages Layer Docs](https://feature-sliced.design/docs/reference/layers#pages)
+
+Individual screens or routes. One slice per route (generally).
 
 **Structure:**
-
 ```
 pages/
 ├── home/
-│   ├── ui/           # HomePage, HeroSection, FeaturedProducts
-│   ├── api/          # loader functions, data fetching
+│   ├── ui/           # HomePage, HeroSection
+│   ├── api/          # loader functions
 │   └── index.ts
 ├── product-detail/
 │   ├── ui/           # ProductDetailPage
 │   ├── api/          # getProduct loader
 │   └── index.ts
 └── checkout/
-    ├── ui/           # CheckoutPage, CheckoutSteps
+    ├── ui/           # CheckoutPage, Steps
     ├── api/          # checkout mutations
-    ├── model/        # checkout form validation
+    ├── model/        # form validation
     └── index.ts
 ```
 
 **Guidelines:**
 - One slice per route (generally)
 - Similar pages can share a slice (login/register)
-- Pages compose widgets, features, and entities
-- Minimal business logic—delegate to lower layers
+- Pages compose widgets, features, entities
+- Minimal business logic — delegate to lower layers
+- Non-reused interactions stay in page slice (v2.1)
 
 ---
 
 ### App Layer
 
+> [App Layer Docs](https://feature-sliced.design/docs/reference/layers#app)
+
 Application-wide configuration and initialization.
 
 **Structure:**
-
 ```
 app/
-├── providers/        # React context providers, store setup
+├── providers/        # React context, store setup
 │   ├── ThemeProvider.tsx
 │   ├── QueryProvider.tsx
 │   └── index.ts
@@ -238,7 +262,7 @@ app/
 ├── styles/           # Global CSS, theme tokens
 │   ├── globals.css
 │   └── theme.ts
-└── index.tsx         # Application entry point
+└── index.tsx         # Entry point
 ```
 
 **Responsibilities:**
@@ -252,36 +276,37 @@ app/
 
 ## Layer Selection Flowchart
 
-```mermaid
-flowchart TD
-    START([Where does this code go?]) --> Q1{Reusable infrastructure<br/>without business logic?}
-
-    Q1 -->|YES| SHARED[shared/]:::layer
-    Q1 -->|NO| Q2{Business domain object<br/>data model?}
-
-    Q2 -->|YES| ENTITIES[entities/]:::layer
-    Q2 -->|NO| Q3{User interaction<br/>with business value?}
-
-    Q3 -->|YES| Q3A{Reused across<br/>pages?}
-    Q3A -->|YES| FEATURES[features/]:::layer
-    Q3A -->|NO| PAGES_SLICE[Keep in pages/ slice]:::layer
-    Q3 -->|NO| Q4{Complex, reusable<br/>UI composition?}
-
-    Q4 -->|YES| WIDGETS[widgets/]:::layer
-    Q4 -->|NO| Q5{Route/screen?}
-
-    Q5 -->|YES| PAGES[pages/]:::layer
-    Q5 -->|NO| APP[app/ or reconsider]:::layer
-
-    classDef layer fill:#3b82f6,stroke:#1d4ed8,color:white
+```
+START: Where does this code go?
+│
+├─ Reusable infrastructure without business logic?
+│  └─ YES → shared/
+│
+├─ Business domain object/data model?
+│  └─ YES → entities/
+│
+├─ User interaction with business value?
+│  ├─ YES, reused across pages → features/
+│  └─ YES, single page only → Keep in pages/ slice
+│
+├─ Complex, reusable UI composition?
+│  └─ YES → widgets/
+│
+├─ Route/screen component?
+│  └─ YES → pages/
+│
+└─ App-wide initialization/config?
+   └─ YES → app/
 ```
 
 ---
 
 ## Common Mistakes
 
-1. **Putting features in entities** - Entities are data, features are actions
-2. **Creating widgets for single-use components** - Keep in pages/ instead
-3. **Business logic in shared** - Shared must be domain-agnostic
-4. **Too many layers** - Start with shared, pages, app; add others as needed
-5. **Importing upward** - Strictly forbidden; refactor if needed
+1. **Features in entities** — Entities are data, features are actions
+2. **Single-use widgets** — Keep in pages/ instead (v2.1)
+3. **Business logic in shared** — Shared must be domain-agnostic
+4. **Too many layers** — Start with shared, pages, app; add as needed
+5. **Importing upward** — Strictly forbidden
+6. **Generic segment names** — Use purpose-driven: `api/`, `model/`, `ui/`
+7. **Everything is a feature** — Only reused interactions qualify

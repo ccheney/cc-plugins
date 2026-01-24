@@ -1,15 +1,20 @@
 ---
 name: mermaid-diagrams
-description: Generate Mermaid diagrams in markdown. Use when the user asks for diagrams, charts, visualizations, flowcharts, sequence diagrams, architecture diagrams, ER diagrams, state machines, Gantt charts, mindmaps, or any visual representation of code, systems, processes, or data structures. Proactively suggest diagrams when explaining complex systems, APIs, database schemas, or workflows.
+description: |
+  Generate Mermaid diagrams in markdown. Triggers on: diagrams, charts, visualizations, flowcharts,
+  sequence diagrams, architecture diagrams, ER diagrams, state machines, Gantt charts, mindmaps,
+  C4, class diagrams, git graphs.
+
+  Use when: user asks for visual representations of code, systems, processes, data structures,
+  database schemas, workflows, or API flows. Proactively suggest diagrams when explaining
+  complex systems.
 ---
 
-# Mermaid Diagram Generation
+# Mermaid Diagrams
 
-Generate diagrams using Mermaid syntax in markdown code blocks. Diagrams render automatically in GitHub, GitLab, Obsidian, Notion, VS Code, and most documentation platforms.
+Generate diagrams in markdown that render in GitHub, GitLab, VS Code, Obsidian, Notion.
 
 ## Quick Start
-
-Wrap diagram code in a fenced code block with `mermaid` language identifier:
 
 ````markdown
 ```mermaid
@@ -20,111 +25,81 @@ flowchart LR
 ```
 ````
 
----
+## Quick Decision Tree
+
+```
+What to visualize?
+├─ Process, algorithm, decision flow    → flowchart
+├─ API calls, service interactions      → sequenceDiagram
+├─ Database tables, relationships       → erDiagram
+├─ OOP, type hierarchy, domain model    → classDiagram
+├─ State machine, lifecycle             → stateDiagram-v2
+├─ System architecture, services        → flowchart + subgraphs (or C4Context)
+├─ Project timeline, sprints            → gantt
+├─ User experience, pain points         → journey
+├─ Git branches                         → gitGraph
+├─ Data distribution                    → pie
+└─ Priority matrix                      → quadrantChart
+```
 
 ## Diagram Types
 
-| Type | Declaration | Use Case |
+| Type | Declaration | Best For |
 |------|-------------|----------|
-| **Flowchart** | `flowchart` | Processes, algorithms, decision flows |
-| **Sequence** | `sequenceDiagram` | API calls, service interactions, protocols |
-| **Class** | `classDiagram` | OOP structures, type hierarchies, domain models |
-| **ER** | `erDiagram` | Database schemas, data models |
-| **State** | `stateDiagram-v2` | State machines, lifecycles |
-| **User Journey** | `journey` | User workflows, experience mapping |
-| **Gantt** | `gantt` | Project schedules, timelines |
-| **Pie** | `pie` | Distribution, percentages |
-| **Mindmap** | `mindmap` | Brainstorming, hierarchies |
-| **Timeline** | `timeline` | Chronological events |
-| **Git Graph** | `gitGraph` | Branch/merge visualization |
-| **C4** | `C4Context` | System architecture (context/container/component) |
-| **Architecture** | `architecture-beta` | Cloud/CI-CD infrastructure diagrams |
-| **Block** | `block-beta` | System component layouts |
-| **Quadrant** | `quadrantChart` | Priority matrices, analysis plots |
-| **XY Chart** | `xychart-beta` | Line/bar charts |
-| **Sankey** | `sankey-beta` | Flow and allocation diagrams |
-| **Kanban** | `kanban` | Workflow boards |
-| **Packet** | `packet-beta` | Network protocol visualization |
-| **Requirement** | `requirementDiagram` | System requirements |
-| **Treemap** | `treemap-beta` | Hierarchical data visualization |
-
----
-
-## When to Use Each Diagram
-
-### System Design
-- **Architecture/C4**: High-level system context, service boundaries
-- **Flowchart with subgraphs**: Service interactions, data flow
-- **Block**: Component layouts, infrastructure
-
-### API & Protocols
-- **Sequence**: Request/response flows, authentication, WebSocket
-- **State**: Connection lifecycles, protocol states
-
-### Data Modeling
-- **ER**: Database schemas with relationships
-- **Class**: Domain models, type hierarchies
-
-### Project Management
-- **Gantt**: Sprint planning, project timelines
-- **Kanban**: Task workflows, sprint boards
-- **Timeline**: Roadmaps, milestones
-
-### Analysis
-- **Quadrant**: Priority matrices, effort/impact analysis
-- **Pie/XY Chart**: Data distribution, trends
-- **Sankey**: Budget allocation, user flows
-- **User Journey**: UX mapping, pain points
-
----
+| **Flowchart** | `flowchart LR/TB` | Processes, decisions, data flow |
+| **Sequence** | `sequenceDiagram` | API flows, service calls |
+| **ER** | `erDiagram` | Database schemas |
+| **Class** | `classDiagram` | Types, domain models |
+| **State** | `stateDiagram-v2` | State machines |
+| **Gantt** | `gantt` | Project timelines |
+| **Journey** | `journey` | User experience |
+| **C4** | `C4Context` | System architecture |
+| **Git** | `gitGraph` | Branch visualization |
 
 ## Common Patterns
 
 ### System Architecture
+
 ```mermaid
 flowchart LR
     subgraph Client
-        Browser[Web Browser]
-        Mobile[Mobile App]
+        Browser & Mobile
     end
     subgraph Services
-        API[API Gateway]
-        Auth[Auth Service]
-        Core[Core Service]
+        API --> Auth & Core
     end
     subgraph Data
         DB[(PostgreSQL)]
-        Cache[(Redis)]
     end
-    Browser & Mobile --> API
-    API --> Auth & Core
-    Core --> DB & Cache
+    Client --> API
+    Core --> DB
 ```
 
 ### API Request Flow
+
 ```mermaid
 sequenceDiagram
     autonumber
     Client->>+API: POST /orders
-    API->>Auth: Validate token
-    Auth-->>API: Valid
-    API->>+DB: Insert order
-    DB-->>-API: Order ID
+    API->>Auth: Validate
+    Auth-->>API: OK
+    API->>+DB: Insert
+    DB-->>-API: ID
     API-->>-Client: 201 Created
 ```
 
 ### Database Schema
+
 ```mermaid
 erDiagram
     USER ||--o{ ORDER : places
     ORDER ||--|{ LINE_ITEM : contains
-    PRODUCT ||--o{ LINE_ITEM : "in"
-
     USER { uuid id PK; string email UK }
-    ORDER { uuid id PK; uuid user_id FK; decimal total }
+    ORDER { uuid id PK; uuid user_id FK }
 ```
 
 ### State Machine
+
 ```mermaid
 stateDiagram-v2
     [*] --> Draft
@@ -134,48 +109,63 @@ stateDiagram-v2
     Approved --> [*]
 ```
 
----
+## Syntax Quick Reference
+
+### Flowchart Nodes
+
+```
+[Rectangle]  (Rounded)  {Diamond}  [(Database)]  [[Subroutine]]
+((Circle))   >Asymmetric]   {{Hexagon}}
+```
+
+### Flowchart Edges
+
+```
+A --> B       # Arrow
+A --- B       # Line
+A -.-> B      # Dotted arrow
+A ==> B       # Thick arrow
+A -->|text| B # Labeled
+```
+
+### Sequence Arrows
+
+```
+->>   # Solid arrow (request)
+-->>  # Dotted arrow (response)
+-x    # X end (async)
+-)    # Open arrow
+```
+
+### ER Cardinality
+
+```
+||--||   # One to one
+||--o{   # One to many
+}o--o{   # Many to many
+```
 
 ## Best Practices
 
-1. **Choose the right diagram type** for your data
-2. **Keep diagrams focused** - one concept per diagram
-3. **Use meaningful labels** - avoid single letters for complex flows
-4. **Add direction hints** - `LR` for timelines, `TB` for hierarchies
-5. **Group related items** in subgraphs or composite states
-6. **Test rendering** in target platform (GitHub, VS Code, etc.)
+1. **Choose the right type** — Use decision tree above
+2. **Keep focused** — One concept per diagram
+3. **Use meaningful labels** — Not just A, B, C
+4. **Direction matters** — `LR` for flows, `TB` for hierarchies
+5. **Group with subgraphs** — Organize related nodes
 
----
+## Reference Documentation
 
-## Reference Files
-
-For detailed syntax and examples, see:
-
-- **[FLOWCHARTS.md](references/FLOWCHARTS.md)** - Node shapes, edges, subgraphs, styling
-- **[SEQUENCE.md](references/SEQUENCE.md)** - Participants, messages, activation, control flow
-- **[CLASS-ER.md](references/CLASS-ER.md)** - Class diagrams, ER diagrams, relationships
-- **[STATE-JOURNEY.md](references/STATE-JOURNEY.md)** - State diagrams, user journey mapping
-- **[DATA-CHARTS.md](references/DATA-CHARTS.md)** - Gantt, Pie, Timeline, Quadrant, XY, Sankey, Treemap
-- **[ARCHITECTURE.md](references/ARCHITECTURE.md)** - Architecture, Block, C4, Kanban diagrams
-- **[ADVANCED.md](references/ADVANCED.md)** - Configuration, theming, styling, troubleshooting
-- **[CHEATSHEET.md](references/CHEATSHEET.md)** - Quick reference for all diagram types
-
----
-
-## Platform Support
-
-| Platform | Support |
-|----------|---------|
-| GitHub | Native (since 2022) |
-| GitLab | Native (13.0+) |
-| VS Code | Markdown Preview Mermaid extension |
-| Obsidian | Native |
-| Notion | Native |
-| Confluence | Plugin available |
-| Docusaurus | Plugin available |
+| File | Purpose |
+|------|---------|
+| [references/FLOWCHARTS.md](references/FLOWCHARTS.md) | Nodes, edges, subgraphs, styling |
+| [references/SEQUENCE.md](references/SEQUENCE.md) | Participants, messages, activation |
+| [references/CLASS-ER.md](references/CLASS-ER.md) | Classes, ER diagrams, relationships |
+| [references/STATE-JOURNEY.md](references/STATE-JOURNEY.md) | States, user journeys |
+| [references/DATA-CHARTS.md](references/DATA-CHARTS.md) | Gantt, Pie, Timeline, Quadrant |
+| [references/ARCHITECTURE.md](references/ARCHITECTURE.md) | C4, Block, Kanban |
+| [references/CHEATSHEET.md](references/CHEATSHEET.md) | All syntax quick reference |
 
 ## Resources
 
 - **Live Editor**: https://mermaid.live
-- **Official Docs**: https://mermaid.js.org
-- **GitHub**: https://github.com/mermaid-js/mermaid
+- **Docs**: https://mermaid.js.org

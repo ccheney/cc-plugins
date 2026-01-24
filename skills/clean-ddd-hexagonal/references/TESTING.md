@@ -1,5 +1,11 @@
 # Testing Patterns
 
+> Sources:
+> - [The Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html) — Robert C. Martin
+> - [Hexagonal Architecture](https://alistair.cockburn.us/hexagonal-architecture/) — Alistair Cockburn
+> - [Unit Testing](https://martinfowler.com/bliki/UnitTest.html) — Martin Fowler
+> - [Test Pyramid](https://martinfowler.com/bliki/TestPyramid.html) — Martin Fowler
+
 Testing strategies for Clean Architecture + DDD + Hexagonal systems.
 
 ## Testing Pyramid
@@ -245,7 +251,6 @@ describe('PlaceOrderHandler', () => {
   });
 
   it('creates order with items and saves', async () => {
-    // Arrange
     productRepo.addProduct(createTestProduct('prod-1', 10.00));
     productRepo.addProduct(createTestProduct('prod-2', 20.00));
 
@@ -257,10 +262,8 @@ describe('PlaceOrderHandler', () => {
       ],
     };
 
-    // Act
     const orderId = await handler.handle(command);
 
-    // Assert
     expect(orderId).toBeDefined();
 
     const savedOrder = await orderRepo.findById(OrderId.from(orderId));
@@ -365,7 +368,6 @@ describe('PostgresOrderRepository', () => {
   });
 
   beforeEach(async () => {
-    // Clean database before each test
     await pool.query('TRUNCATE orders, order_items CASCADE');
   });
 
@@ -375,15 +377,12 @@ describe('PostgresOrderRepository', () => {
 
   describe('save and findById', () => {
     it('persists and retrieves order', async () => {
-      // Arrange
       const order = Order.create(CustomerId.from('cust-123'));
       order.addItem(ProductId.from('prod-1'), Quantity.create(2), Money.create(10, 'USD'));
 
-      // Act
       await repository.save(order);
       const retrieved = await repository.findById(order.id);
 
-      // Assert
       expect(retrieved).not.toBeNull();
       expect(retrieved!.id.value).toBe(order.id.value);
       expect(retrieved!.items).toHaveLength(1);
@@ -395,7 +394,6 @@ describe('PostgresOrderRepository', () => {
       order.addItem(ProductId.from('prod-1'), Quantity.create(1), Money.create(10, 'USD'));
       await repository.save(order);
 
-      // Modify and save again
       order.addItem(ProductId.from('prod-2'), Quantity.create(3), Money.create(20, 'USD'));
       await repository.save(order);
 
@@ -438,13 +436,11 @@ describe('Orders API', () => {
   });
 
   beforeEach(async () => {
-    await pool.query('TRUNCATE orders, order_items, products CASCADE');
-    // Seed test data
-    await pool.query(`
-      INSERT INTO products (id, name, price) VALUES
-      ('prod-1', 'Product 1', 1000),
-      ('prod-2', 'Product 2', 2000)
-    `);
+    await db.truncate("orders", "order_items", "products");
+    await db.products.insertMany([
+      { id: "prod-1", name: "Product 1", price: 1000 },
+      { id: "prod-2", name: "Product 2", price: 2000 }
+    ]);
   });
 
   afterAll(async () => {
@@ -482,7 +478,6 @@ describe('Orders API', () => {
 
   describe('GET /orders/:id', () => {
     it('returns order details', async () => {
-      // Create order first
       const createResponse = await request(app)
         .post('/orders')
         .send({
@@ -491,8 +486,6 @@ describe('Orders API', () => {
         });
 
       const orderId = createResponse.body.id;
-
-      // Get order
       const response = await request(app).get(`/orders/${orderId}`);
 
       expect(response.status).toBe(200);

@@ -1,5 +1,7 @@
 # Quick Reference Cheatsheet
 
+> See [SKILL.md](../SKILL.md#sources) for full source list.
+
 ## Layer Summary
 
 ```mermaid
@@ -117,17 +119,14 @@ export class Money {
   ) {}
 
   static create(amount: number, currency: string): Money {
-    // Validation
     if (amount < 0) throw new Error('Negative');
     return new Money(amount, currency);
   }
 
-  // Behavior methods return NEW instances
   add(other: Money): Money {
     return Money.create(this._amount + other._amount, this._currency);
   }
 
-  // Getters only
   get amount(): number { return this._amount; }
   get currency(): string { return this._currency; }
 
@@ -152,12 +151,10 @@ export class OrderItem extends Entity<OrderItemId> {
     return new OrderItem(OrderItemId.generate(), productId, quantity);
   }
 
-  // Mutation methods (change internal state)
   increaseQuantity(amount: number): void {
     this._quantity = this._quantity.add(amount);
   }
 
-  // Getters
   get productId(): ProductId { return this._productId; }
   get quantity(): Quantity { return this._quantity; }
 }
@@ -170,21 +167,18 @@ export class Order extends AggregateRoot<OrderId> {
   private _items: OrderItem[] = [];
   private _status: OrderStatus;
 
-  // Private constructor
   private constructor(id: OrderId, customerId: CustomerId) {
     super(id);
     this._customerId = customerId;
     this._status = OrderStatus.Draft;
   }
 
-  // Factory method (emit event)
   static create(customerId: CustomerId): Order {
     const order = new Order(OrderId.generate(), customerId);
     order.addDomainEvent(new OrderCreated(order.id, customerId));
     return order;
   }
 
-  // Business methods (enforce invariants)
   addItem(productId: ProductId, quantity: Quantity, price: Money): void {
     this.assertCanModify();
     this._items.push(OrderItem.create(productId, quantity, price));
@@ -197,14 +191,12 @@ export class Order extends AggregateRoot<OrderId> {
     this.addDomainEvent(new OrderConfirmed(this.id, this.total));
   }
 
-  // Invariant guards
   private assertCanModify(): void {
     if (this._status === OrderStatus.Cancelled) {
       throw new InvalidOrderStateError('Order is cancelled');
     }
   }
 
-  // Computed properties
   get total(): Money { /* ... */ }
 }
 ```
@@ -230,19 +222,14 @@ export class PlaceOrderHandler {
   ) {}
 
   async execute(command: PlaceOrderCommand): Promise<OrderId> {
-    // 1. Create/load aggregates
     const order = Order.create(CustomerId.from(command.customerId));
 
-    // 2. Execute domain logic
     for (const item of command.items) {
       const product = await this.productRepo.findById(item.productId);
       order.addItem(product.id, Quantity.create(item.quantity), product.price);
     }
 
-    // 3. Persist
     await this.orderRepo.save(order);
-
-    // 4. Publish events
     await this.eventPublisher.publishAll(order.domainEvents);
 
     return order.id;
@@ -272,8 +259,10 @@ export class PlaceOrderHandler {
 | Fat Use Cases | Business logic in handlers | Move to domain |
 | Leaky Abstraction | Domain depends on ORM | Keep domain pure |
 | God Aggregate | One massive aggregate | Split into smaller ones |
-| Cross-Aggregate Transactions | Modifying multiple in one TX | Use domain events |
+| Cross-Aggregate TX | Modifying multiple in one TX | Use domain events |
 | Direct Layer Skip | Controller → Repository | Go through application layer |
+| Premature CQRS | Adding complexity early | Start simple, evolve |
+| Event Proliferation | Too many fine-grained events | May signal context boundary |
 
 ---
 
@@ -332,20 +321,36 @@ flowchart LR
 
 ### Use Clean + DDD + Hexagonal When:
 
-- ✅ Complex business domain
-- ✅ Long-lived system (years)
+- ✅ Complex business domain with many rules
+- ✅ Long-lived system (years of maintenance)
 - ✅ Large team (5+ developers)
-- ✅ Need to swap infrastructure
+- ✅ Need to swap infrastructure (DB, broker, etc.)
 - ✅ High test coverage required
-- ✅ Multiple entry points (API, CLI, events)
+- ✅ Multiple entry points (API, CLI, events, scheduled jobs)
 
 ### Skip When:
 
-- ❌ Simple CRUD application
-- ❌ Prototype / MVP
+- ❌ Simple CRUD application (most applications)
+- ❌ Prototype / MVP / throwaway code
 - ❌ Small team (1-2 devs)
 - ❌ Short-lived project
 - ❌ Trivial business logic
+
+### Complexity Ladder (Start Simple)
+
+```
+Level 1: Simple layered (Controller → Service → Repository)
+   ↓ When business rules grow complex
+Level 2: Domain model (Entities with behavior)
+   ↓ When need multiple entry points
+Level 3: Hexagonal (Ports & Adapters)
+   ↓ When read/write patterns diverge significantly
+Level 4: CQRS (Separate read/write models)
+   ↓ When need complete audit trail / temporal queries
+Level 5: Event Sourcing (Store events, derive state)
+```
+
+**Don't skip levels.** Each level adds complexity. Move up only when you've proven the current level insufficient.
 
 ---
 

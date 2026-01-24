@@ -1,79 +1,41 @@
 # robust-skills
 
-Production-grade skills that encode battle-tested architectural patterns and best practices directly into your AI-assisted development workflow.
+Architectural taste for AI-assisted development. Backend patterns (DDD, Hexagonal, Clean Architecture), frontend structure (Feature-Sliced Design), database design (Postgres/Drizzle), and system visualization (Mermaid).
 
-## Overview
-
-**robust-skills** extends AI coding agents with domain-specific expertise for building maintainable, scalable software. Each skill packages comprehensive knowledge—architectural patterns, code examples, anti-patterns to avoid—so your agent can guide you toward robust implementations from the start.
-
-**Why skills matter:**
-- **Consistency** — Apply the same proven patterns across your entire codebase
-- **Speed** — Skip the research phase; best practices are built-in
-- **Quality** — Avoid common pitfalls with anti-pattern awareness
-- **Learning** — Each skill includes reference documentation for deeper understanding
-
-## Skills
-
-| Skill | Domain | Description |
-|-------|--------|-------------|
-| [clean-ddd-hexagonal](skills/clean-ddd-hexagonal/) | Backend | Clean Architecture + DDD + Hexagonal patterns for maintainable services |
-| [feature-slicing](skills/feature-slicing/) | Frontend | Feature-Sliced Design (FSD) for scalable React/Next.js/Vue projects |
-| [mermaid-diagrams](skills/mermaid-diagrams/) | Documentation | Generate architectural diagrams in markdown |
-| [postgres-drizzle](skills/postgres-drizzle/) | Database | PostgreSQL 18 + Drizzle ORM type-safe database patterns |
-
-## Installation
-
+Install all skills:
 ```bash
-npx skills add ccheney/robust-skills
+npx skills add https://github.com/ccheney/robust-skills
 ```
-
-## Usage
-
-Once installed, skills activate automatically based on context. You can also invoke them explicitly:
-
-```
-# Architecture skills trigger on relevant tasks
-"Set up a new Express API with clean architecture skill"
-"Create a new feature for user authentication using FSD skill"
-
-# Or reference directly
-"Use the postgres-drizzle skill to design my schema"
-"Using the mermaid skill generate a diagram showing the data flow"
-```
-
-## Skill Overview
 
 ### clean-ddd-hexagonal
 
-Combines three complementary patterns for building maintainable, testable backend systems:
+```bash
+npx skills add https://github.com/ccheney/robust-skills --skill clean-ddd-hexagonal
+```
 
-- **Domain-Driven Design (DDD)** — Strategic and tactical patterns for modeling complex business domains
-- **Clean Architecture** — Dependency rules ensuring business logic independence
-- **Hexagonal Architecture** — Ports & Adapters for external system isolation
-
-Language-agnostic: works with Go, Rust, Python, TypeScript, Java, and any backend language.
+Apply Clean Architecture + DDD + Hexagonal patterns to backend services. Use when designing APIs, microservices, domain models, aggregates, repositories, bounded contexts, or scalable backend structure. Language-agnostic (Go, Rust, Python, TypeScript, Java, C#).
 
 ### feature-slicing
 
-Feature-Sliced Design (FSD) is an architectural methodology for scaffolding frontend applications with rules and conventions for organizing code to remain understandable and stable amid changing business requirements.
+```bash
 
-- **Layers** — 7 standardized horizontal levels (app, pages, widgets, features, entities, shared)
-- **Import Rule** — Modules can only import from layers strictly below them
-- **Slices** — Business-domain partitions within layers
-- **Segments** — Purpose-based groupings (ui, api, model, lib, config)
+npx skills add https://github.com/ccheney/robust-skills --skill feature-slicing
+```
+
+Apply Feature-Sliced Design (FSD) architecture to frontend projects. Use when creating new features/components/pages, restructuring React/Next.js/Vue/Remix projects, organizing frontend code, setting up project structure, fixing import violations, or migrating legacy codebases.
 
 ### mermaid-diagrams
 
-Generate diagrams using Mermaid syntax in markdown code blocks. Diagrams render automatically in GitHub, GitLab, Obsidian, Notion, VS Code, and most documentation platforms.
+```bash
+npx skills add https://github.com/ccheney/robust-skills --skill mermaid-diagrams
+```
 
-Supports flowcharts, sequence diagrams, class diagrams, ER diagrams, state machines, user journeys, Gantt charts, pie charts, mindmaps, timelines, git graphs, C4 architecture, and more.
+Generate Mermaid diagrams in markdown. Use when visualizing code, systems, processes, data structures, database schemas, workflows, or API flows. Supports flowcharts, sequence diagrams, ER diagrams, state machines, Gantt charts, mindmaps, C4, class diagrams, and git graphs.
 
 ### postgres-drizzle
 
-Type-safe database applications with PostgreSQL 18 and Drizzle ORM.
+```bash
+npx skills add https://github.com/ccheney/robust-skills --skill postgres-drizzle
+```
 
-- **Schema Definition** — Type-safe table definitions with TypeScript
-- **Relations** — Declarative relationship mapping
-- **Queries** — Type-safe query builder with full SQL power
-- **Migrations** — Generated SQL migrations from schema changes
-- **PostgreSQL 18** — UUIDv7, async I/O, index skip scan, RETURNING OLD/NEW
+PostgreSQL and Drizzle ORM best practices. Use when writing database schemas, queries, migrations, or any database-related code. Proactively apply when creating APIs, backends, or data models.

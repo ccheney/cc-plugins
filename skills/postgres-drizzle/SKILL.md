@@ -1,112 +1,175 @@
 ---
 name: postgres-drizzle
-description: PostgreSQL and Drizzle ORM best practices. Use when writing database schemas, queries, migrations, or any database-related code. Triggers on mentions of PostgreSQL, Postgres, Drizzle, database, schema, tables, columns, indexes, queries, migrations, ORM, relations, joins, transactions, or SQL. Proactively apply when creating APIs, backends, or data models.
+description: |
+  PostgreSQL and Drizzle ORM best practices. Triggers on: PostgreSQL, Postgres, Drizzle, database,
+  schema, tables, columns, indexes, queries, migrations, ORM, relations, joins, transactions, SQL,
+  drizzle-kit, connection pooling, N+1, JSONB, RLS.
+
+  Use when: writing database schemas, queries, migrations, or any database-related code.
+  Proactively apply when creating APIs, backends, or data models.
 ---
 
-# PostgreSQL + Drizzle ORM Best Practices
+# PostgreSQL + Drizzle ORM
 
 Type-safe database applications with PostgreSQL 18 and Drizzle ORM.
+
+## Essential Commands
+
+```bash
+npx drizzle-kit generate   # Generate migration from schema changes
+npx drizzle-kit migrate    # Apply pending migrations
+npx drizzle-kit push       # Push schema directly (dev only!)
+npx drizzle-kit studio     # Open database browser
+```
+
+## Quick Decision Trees
+
+### "How do I model this relationship?"
+
+```
+Relationship type?
+├─ One-to-many (user has posts)     → FK on "many" side + relations()
+├─ Many-to-many (posts have tags)   → Junction table + relations()
+├─ One-to-one (user has profile)    → FK with unique constraint
+└─ Self-referential (comments)      → FK to same table
+```
+
+### "Why is my query slow?"
+
+```
+Slow query?
+├─ Missing index on WHERE/JOIN columns  → Add index
+├─ N+1 queries in loop                  → Use relational queries API
+├─ Full table scan                      → EXPLAIN ANALYZE, add index
+├─ Large result set                     → Add pagination (limit/offset)
+└─ Connection overhead                  → Enable connection pooling
+```
+
+### "Which drizzle-kit command?"
+
+```
+What do I need?
+├─ Schema changed, need SQL migration   → drizzle-kit generate
+├─ Apply migrations to database         → drizzle-kit migrate
+├─ Quick dev iteration (no migration)   → drizzle-kit push
+└─ Browse/edit data visually            → drizzle-kit studio
+```
 
 ## Directory Structure
 
 ```
 src/db/
 ├── schema/
-│   ├── index.ts      # Re-export all tables
-│   ├── users.ts      # User table + relations
-│   └── posts.ts      # Post table + relations
-├── db.ts             # Database connection
-└── migrate.ts        # Migration runner
+│   ├── index.ts          # Re-export all tables
+│   ├── users.ts          # Table + relations
+│   └── posts.ts          # Table + relations
+├── db.ts                 # Connection with pooling
+└── migrate.ts            # Migration runner
 drizzle/
-└── migrations/       # Generated SQL migrations
-drizzle.config.ts     # drizzle-kit configuration
+└── migrations/           # Generated SQL files
+drizzle.config.ts         # drizzle-kit config
 ```
 
-## Essential Commands
+## Schema Patterns
 
-```bash
-npx drizzle-kit generate   # Generate migration from schema
-npx drizzle-kit migrate    # Apply migrations
-npx drizzle-kit push       # Push schema directly (dev only)
-npx drizzle-kit studio     # Database browser
+### Basic Table with Timestamps
+
+```typescript
+export const users = pgTable('users', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
 ```
 
-## PostgreSQL 18 Highlights
+### Foreign Key with Index
 
-| Feature | Benefit |
-|---------|---------|
-| **UUIDv7** | Timestamp-ordered UUIDs, better index performance |
-| **Async I/O** | Up to 3x faster sequential scans |
-| **Index Skip Scan** | ~40% faster queries on composite indexes |
-| **RETURNING OLD/NEW** | Access previous values in UPDATE/DELETE |
+```typescript
+export const posts = pgTable('posts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id),
+  title: varchar('title', { length: 255 }).notNull(),
+}, (table) => [
+  index('posts_user_id_idx').on(table.userId), // ALWAYS index FKs
+]);
+```
+
+### Relations
+
+```typescript
+export const usersRelations = relations(users, ({ many }) => ({
+  posts: many(posts),
+}));
+
+export const postsRelations = relations(posts, ({ one }) => ({
+  author: one(users, { fields: [posts.userId], references: [users.id] }),
+}));
+```
+
+## Query Patterns
+
+### Relational Query (Avoid N+1)
+
+```typescript
+// ✓ Single query with nested data
+const usersWithPosts = await db.query.users.findMany({
+  with: { posts: true },
+});
+```
+
+### Filtered Query
+
+```typescript
+const activeUsers = await db
+  .select()
+  .from(users)
+  .where(eq(users.status, 'active'));
+```
+
+### Transaction
+
+```typescript
+await db.transaction(async (tx) => {
+  const [user] = await tx.insert(users).values({ email }).returning();
+  await tx.insert(profiles).values({ userId: user.id });
+});
+```
 
 ## Performance Checklist
 
-- [ ] Use `uuidv7()` for primary keys (PG18+) or `defaultRandom()`
-- [ ] Create indexes on foreign keys
-- [ ] Use partial indexes for filtered subsets
-- [ ] Use relational queries API to avoid N+1
-- [ ] Configure connection pooling in production
-- [ ] Run `EXPLAIN (ANALYZE, BUFFERS)` for slow queries
+| Priority | Check | Impact |
+|----------|-------|--------|
+| CRITICAL | Index all foreign keys | Prevents full table scans on JOINs |
+| CRITICAL | Use relational queries for nested data | Avoids N+1 |
+| HIGH | Connection pooling in production | Reduces connection overhead |
+| HIGH | `EXPLAIN ANALYZE` slow queries | Identifies missing indexes |
+| MEDIUM | Partial indexes for filtered subsets | Smaller, faster indexes |
+| MEDIUM | UUIDv7 for PKs (PG18+) | Better index locality |
 
----
+## Anti-Patterns (CRITICAL)
 
-## Code Examples
-
-Complete, runnable examples in the `examples/` directory:
-
-### TypeScript (Drizzle ORM)
-
-| File | Description |
-|------|-------------|
-| **Schema** | |
-| `examples/typescript/schema/users.ts` | User table with timestamps, soft delete |
-| `examples/typescript/schema/posts.ts` | Posts with foreign key, indexes |
-| `examples/typescript/schema/many-to-many.ts` | Junction table pattern |
-| `examples/typescript/schema/enums-jsonb.ts` | Enums and typed JSONB |
-| **Queries** | |
-| `examples/typescript/queries/select.ts` | Filters, pagination, search |
-| `examples/typescript/queries/joins.ts` | Left/inner/multiple joins |
-| `examples/typescript/queries/aggregations.ts` | Count, sum, group by |
-| `examples/typescript/queries/mutations.ts` | Insert, update, delete, upsert |
-| `examples/typescript/queries/transactions.ts` | Transactions, savepoints |
-| **Relations** | |
-| `examples/typescript/relations/relational-queries.ts` | Nested queries, column selection |
-| **Migrations** | |
-| `examples/typescript/migrations/drizzle.config.ts` | drizzle-kit configuration |
-| `examples/typescript/migrations/migrate.ts` | Programmatic migration runner |
-| `examples/typescript/migrations/seed.ts` | Database seeding |
-| **Setup** | |
-| `examples/typescript/db.ts` | Connection with pooling |
-
-### SQL (PostgreSQL)
-
-| File | Description |
-|------|-------------|
-| `examples/sql/indexes.sql` | B-tree, partial, covering, GIN indexes |
-| `examples/sql/partitioning.sql` | Range, list, hash partitioning |
-| `examples/sql/rls.sql` | Row-level security policies |
-| `examples/sql/jsonb.sql` | JSONB operators, functions, indexing |
-| `examples/sql/pg18-features.sql` | UUIDv7, async I/O, RETURNING OLD/NEW |
-
----
+| Anti-Pattern | Problem | Fix |
+|--------------|---------|-----|
+| **No FK index** | Slow JOINs, full scans | Add index on every FK column |
+| **N+1 in loops** | Query per row | Use `with:` relational queries |
+| **No pooling** | Connection per request | Use `@neondatabase/serverless` or similar |
+| **`push` in prod** | Data loss risk | Always use `generate` + `migrate` |
+| **Storing JSON as text** | No validation, bad queries | Use `jsonb()` column type |
 
 ## Reference Documentation
 
-Detailed explanations in `references/`:
-
-- **[SCHEMA.md](references/SCHEMA.md)** - Column types, constraints, patterns
-- **[QUERIES.md](references/QUERIES.md)** - Operators, joins, aggregations
-- **[RELATIONS.md](references/RELATIONS.md)** - One-to-many, many-to-many, relational API
-- **[MIGRATIONS.md](references/MIGRATIONS.md)** - drizzle-kit workflows
-- **[POSTGRES.md](references/POSTGRES.md)** - PostgreSQL 18 features, RLS, partitioning
-- **[PERFORMANCE.md](references/PERFORMANCE.md)** - Indexing, optimization, pooling
-- **[CHEATSHEET.md](references/CHEATSHEET.md)** - Quick reference
-
----
+| File | Purpose |
+|------|---------|
+| [references/SCHEMA.md](references/SCHEMA.md) | Column types, constraints |
+| [references/QUERIES.md](references/QUERIES.md) | Operators, joins, aggregations |
+| [references/RELATIONS.md](references/RELATIONS.md) | One-to-many, many-to-many |
+| [references/MIGRATIONS.md](references/MIGRATIONS.md) | drizzle-kit workflows |
+| [references/POSTGRES.md](references/POSTGRES.md) | PG18 features, RLS, partitioning |
+| [references/PERFORMANCE.md](references/PERFORMANCE.md) | Indexing, optimization |
+| [references/CHEATSHEET.md](references/CHEATSHEET.md) | Quick reference |
 
 ## Resources
 
 - **Drizzle Docs**: https://orm.drizzle.team
-- **PostgreSQL Docs**: https://www.postgresql.org/docs/18/
-- **Drizzle Studio**: `npx drizzle-kit studio`
+- **PostgreSQL 18**: https://www.postgresql.org/docs/18/

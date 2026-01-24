@@ -1,119 +1,175 @@
 ---
 name: clean-ddd-hexagonal
-description: Apply Clean Architecture with Domain-Driven Design and Hexagonal (Ports & Adapters) patterns to backend services. Use when designing APIs, microservices, domain models, repositories, or when user mentions DDD, Clean Architecture, Hexagonal, ports and adapters, bounded contexts, aggregates, or scalable backend structure. Language-agnostic - works with Go, Rust, Python, TypeScript, Java, and any backend language.
+description: >
+  Apply Clean Architecture + DDD + Hexagonal patterns to backend services.
+  Use when designing APIs, microservices, domain models, aggregates, repositories,
+  bounded contexts, or scalable backend structure. Triggers on DDD, Clean Architecture,
+  Hexagonal, ports and adapters, entities, value objects, domain events, CQRS,
+  event sourcing, repository pattern, use cases, onion architecture, outbox pattern,
+  aggregate root, anti-corruption layer. Language-agnostic (Go, Rust, Python, TypeScript, Java, C#).
 ---
 
 # Clean Architecture + DDD + Hexagonal
 
-## Overview
+Backend architecture combining DDD tactical patterns, Clean Architecture dependency rules, and Hexagonal ports/adapters for maintainable, testable systems.
 
-This skill combines three complementary patterns for building maintainable, testable backend systems:
+## When to Use (and When NOT to)
 
-- **Domain-Driven Design (DDD)** - Strategic and tactical patterns for modeling complex business domains
-- **Clean Architecture** - Dependency rules ensuring business logic independence
-- **Hexagonal Architecture** - Ports & Adapters for external system isolation
+| Use When | Skip When |
+|----------|-----------|
+| Complex business domain with many rules | Simple CRUD, few business rules |
+| Long-lived system (years of maintenance) | Prototype, MVP, throwaway code |
+| Team of 5+ developers | Solo developer or small team (1-2) |
+| Multiple entry points (API, CLI, events) | Single entry point, simple API |
+| Need to swap infrastructure (DB, broker) | Fixed infrastructure, unlikely to change |
+| High test coverage required | Quick scripts, internal tools |
 
-**Key Sources:**
-- Clean Architecture: Robert C. Martin (2012) - https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html
-- Hexagonal Architecture: Alistair Cockburn (2005) - https://alistair.cockburn.us/hexagonal-architecture/
-- Domain-Driven Design: Eric Evans (2003) - https://www.domainlanguage.com/ddd/
+**Start simple. Evolve complexity only when needed.** Most systems don't need full CQRS or Event Sourcing.
 
-## Core Principles
+## CRITICAL: The Dependency Rule
 
-### The Dependency Rule
 Dependencies point **inward only**. Outer layers depend on inner layers, never the reverse.
 
-```mermaid
-flowchart TB
-    subgraph Infrastructure["Infrastructure (Adapters)"]
-        subgraph Application["Application (Use Cases / Ports)"]
-            subgraph Domain["Domain (Entities, Value Objects, Aggregates)"]
-                Core[" "]
-            end
-        end
-    end
-
-    style Domain fill:#10b981,stroke:#059669,color:white
-    style Application fill:#3b82f6,stroke:#2563eb,color:white
-    style Infrastructure fill:#6366f1,stroke:#4f46e5,color:white
-    style Core fill:#10b981,stroke:#059669
+```
+Infrastructure → Application → Domain
+   (adapters)     (use cases)    (core)
 ```
 
-### Hexagonal Ports & Adapters
-- **Driver Ports** (Primary/Inbound): How the world uses your application
-- **Driven Ports** (Secondary/Outbound): How your application uses external systems
-- **Adapters**: Concrete implementations of ports
+**Violations to catch:**
+- Domain importing database/HTTP libraries
+- Controllers calling repositories directly (bypassing use cases)
+- Entities depending on application services
 
-## Quick Reference Structure
+**Design validation:** "Create your application to work without either a UI or a database" — Alistair Cockburn. If you can run your domain logic from tests with no infrastructure, your boundaries are correct.
+
+## Quick Decision Trees
+
+### "Where does this code go?"
+
+```
+Where does it go?
+├─ Pure business logic, no I/O           → domain/
+├─ Orchestrates domain + has side effects → application/
+├─ Talks to external systems              → infrastructure/
+├─ Defines HOW to interact (interface)    → port (domain or application)
+└─ Implements a port                      → adapter (infrastructure)
+```
+
+### "Is this an Entity or Value Object?"
+
+```
+Entity or Value Object?
+├─ Has unique identity that persists → Entity
+├─ Defined only by its attributes    → Value Object
+├─ "Is this THE same thing?"         → Entity (identity comparison)
+└─ "Does this have the same value?"  → Value Object (structural equality)
+```
+
+### "Should this be its own Aggregate?"
+
+```
+Aggregate boundaries?
+├─ Must be consistent together in a transaction → Same aggregate
+├─ Can be eventually consistent                 → Separate aggregates
+├─ Referenced by ID only                        → Separate aggregates
+└─ >10 entities in aggregate                    → Split it
+```
+
+**Rule:** One aggregate per transaction. Cross-aggregate consistency via domain events (eventual consistency).
+
+## Directory Structure
 
 ```
 src/
-├── domain/                    # Core business logic (no dependencies)
+├── domain/                    # Core business logic (NO external dependencies)
 │   ├── {aggregate}/
-│   │   ├── entity.ts          # Aggregate root + entities
-│   │   ├── value_objects.ts   # Immutable value types
-│   │   ├── events.ts          # Domain events
-│   │   ├── repository.ts      # Repository interface (port)
-│   │   └── services.ts        # Domain services
+│   │   ├── entity              # Aggregate root + child entities
+│   │   ├── value_objects       # Immutable value types
+│   │   ├── events              # Domain events
+│   │   ├── repository          # Repository interface (DRIVEN PORT)
+│   │   └── services            # Domain services (stateless logic)
 │   └── shared/
-│       └── errors.ts          # Domain errors
+│       └── errors              # Domain errors
 ├── application/               # Use cases / Application services
 │   ├── {use-case}/
-│   │   ├── command.ts         # Command/Query DTOs
-│   │   ├── handler.ts         # Use case implementation
-│   │   └── port.ts            # Driver port interface
+│   │   ├── command             # Command/Query DTOs
+│   │   ├── handler             # Use case implementation
+│   │   └── port                # Driver port interface
 │   └── shared/
-│       └── unit_of_work.ts    # Transaction abstraction
+│       └── unit_of_work        # Transaction abstraction
 ├── infrastructure/            # Adapters (external concerns)
-│   ├── persistence/
-│   │   ├── postgres/          # Database adapter
-│   │   └── in_memory/         # Test adapter
-│   ├── messaging/
-│   │   └── rabbitmq/          # Message broker adapter
-│   ├── http/
-│   │   └── rest/              # REST API adapter (driver)
+│   ├── persistence/           # Database adapters
+│   ├── messaging/             # Message broker adapters
+│   ├── http/                  # REST/GraphQL adapters (DRIVER)
 │   └── config/
-│       └── di.ts              # Dependency injection
-└── main.ts                    # Composition root
+│       └── di                  # Dependency injection / composition root
+└── main                        # Bootstrap / entry point
 ```
 
 ## DDD Building Blocks
 
-| Pattern | Purpose | Layer |
-|---------|---------|-------|
-| **Entity** | Identity + behavior | Domain |
-| **Value Object** | Immutable, equality by value | Domain |
-| **Aggregate** | Consistency boundary | Domain |
-| **Domain Event** | Record of something that happened | Domain |
-| **Repository** | Collection-like persistence abstraction | Domain (interface), Infra (impl) |
-| **Domain Service** | Stateless business logic | Domain |
-| **Application Service** | Orchestrates use cases | Application |
+| Pattern | Purpose | Layer | Key Rule |
+|---------|---------|-------|----------|
+| **Entity** | Identity + behavior | Domain | Equality by ID |
+| **Value Object** | Immutable data | Domain | Equality by value, no setters |
+| **Aggregate** | Consistency boundary | Domain | Only root is referenced externally |
+| **Domain Event** | Record of change | Domain | Past tense naming (`OrderPlaced`) |
+| **Repository** | Persistence abstraction | Domain (port) | Per aggregate, not per table |
+| **Domain Service** | Stateless logic | Domain | When logic doesn't fit an entity |
+| **Application Service** | Orchestration | Application | Coordinates domain + infra |
 
-## When Implementing
+## Anti-Patterns (CRITICAL)
 
-1. **Start with the Domain** - Model entities, value objects, and aggregates first
-2. **Define Ports** - Interfaces for repositories and external services
-3. **Implement Use Cases** - Application services orchestrating domain logic
-4. **Add Adapters Last** - HTTP controllers, database implementations, etc.
+| Anti-Pattern | Problem | Fix |
+|--------------|---------|-----|
+| **Anemic Domain Model** | Entities are data bags, logic in services | Move behavior INTO entities |
+| **Repository per Entity** | Breaks aggregate boundaries | One repository per AGGREGATE |
+| **Leaking Infrastructure** | Domain imports DB/HTTP libs | Domain has ZERO external deps |
+| **God Aggregate** | Too many entities, slow transactions | Split into smaller aggregates |
+| **Skipping Ports** | Controllers → Repositories directly | Always go through application layer |
+| **CRUD Thinking** | Modeling data, not behavior | Model business operations |
+| **Premature CQRS** | Adding complexity before needed | Start with simple read/write, evolve |
+| **Cross-Aggregate TX** | Multiple aggregates in one transaction | Use domain events for consistency |
+
+## Implementation Order
+
+1. **Discover the Domain** — Event Storming, conversations with domain experts
+2. **Model the Domain** — Entities, value objects, aggregates (no infra)
+3. **Define Ports** — Repository interfaces, external service interfaces
+4. **Implement Use Cases** — Application services coordinating domain
+5. **Add Adapters last** — HTTP, database, messaging implementations
+
+**DDD is collaborative.** Modeling sessions with domain experts are as important as the code patterns.
 
 ## Reference Documentation
 
-For detailed implementation guidance:
+| File | Purpose |
+|------|---------|
+| [references/LAYERS.md](references/LAYERS.md) | Complete layer specifications |
+| [references/DDD-STRATEGIC.md](references/DDD-STRATEGIC.md) | Bounded contexts, context mapping |
+| [references/DDD-TACTICAL.md](references/DDD-TACTICAL.md) | Entities, value objects, aggregates (pseudocode) |
+| [references/HEXAGONAL.md](references/HEXAGONAL.md) | Ports, adapters, naming |
+| [references/CQRS-EVENTS.md](references/CQRS-EVENTS.md) | Command/query separation, events |
+| [references/TESTING.md](references/TESTING.md) | Unit, integration, architecture tests |
+| [references/CHEATSHEET.md](references/CHEATSHEET.md) | Quick decision guide |
 
-- **[Layer Structure](references/LAYERS.md)** - Complete layer specifications and responsibilities
-- **[DDD Strategic Patterns](references/DDD-STRATEGIC.md)** - Bounded contexts, context mapping, subdomains
-- **[DDD Tactical Patterns](references/DDD-TACTICAL.md)** - Entities, value objects, aggregates, repositories
-- **[Hexagonal Patterns](references/HEXAGONAL.md)** - Ports, adapters, naming conventions
-- **[Implementation Examples](references/IMPLEMENTATION.md)** - Code in Go, Rust, Python, TypeScript
-- **[CQRS & Events](references/CQRS-EVENTS.md)** - Command/query separation, domain events
-- **[Testing Patterns](references/TESTING.md)** - Unit, integration, and architecture tests
-- **[Cheatsheet](references/CHEATSHEET.md)** - Quick decision guide and patterns
+## Sources
 
-## Key Anti-Patterns to Avoid
+### Primary Sources
+- [The Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html) — Robert C. Martin (2012)
+- [Hexagonal Architecture](https://alistair.cockburn.us/hexagonal-architecture/) — Alistair Cockburn (2005)
+- [Domain-Driven Design: The Blue Book](https://www.domainlanguage.com/ddd/blue-book/) — Eric Evans (2003)
+- [Implementing Domain-Driven Design](https://www.amazon.com/Implementing-Domain-Driven-Design-Vaughn-Vernon/dp/0321834577) — Vaughn Vernon (2013)
 
-- **Anemic Domain Model** - Entities with only getters/setters, logic in services
-- **Repository per Entity** - Repositories are per Aggregate, not per table
-- **Leaking Infrastructure** - Domain importing database/HTTP libraries
-- **God Aggregates** - Aggregates too large; keep them small and focused
-- **Skipping Ports** - Controllers calling repositories directly
-- **CRUD Thinking** - Modeling around data, not behavior
+### Pattern References
+- [CQRS](https://martinfowler.com/bliki/CQRS.html) — Martin Fowler
+- [Event Sourcing](https://martinfowler.com/eaaDev/EventSourcing.html) — Martin Fowler
+- [Repository Pattern](https://martinfowler.com/eaaCatalog/repository.html) — Martin Fowler (PoEAA)
+- [Unit of Work](https://martinfowler.com/eaaCatalog/unitOfWork.html) — Martin Fowler (PoEAA)
+- [Bounded Context](https://martinfowler.com/bliki/BoundedContext.html) — Martin Fowler
+- [Transactional Outbox](https://microservices.io/patterns/data/transactional-outbox.html) — microservices.io
+- [Effective Aggregate Design](https://www.dddcommunity.org/library/vernon_2011/) — Vaughn Vernon
+
+### Implementation Guides
+- [Microsoft: DDD + CQRS Microservices](https://learn.microsoft.com/en-us/dotnet/architecture/microservices/microservice-ddd-cqrs-patterns/)
+- [Domain Events](https://udidahan.com/2009/06/14/domain-events-salvation/) — Udi Dahan

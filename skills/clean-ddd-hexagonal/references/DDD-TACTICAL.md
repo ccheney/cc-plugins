@@ -1,9 +1,10 @@
 # DDD Tactical Patterns
 
 > Sources:
-> - Domain-Driven Design (Eric Evans, 2003)
-> - Implementing Domain-Driven Design (Vaughn Vernon, 2013)
-> - https://learn.microsoft.com/en-us/dotnet/architecture/microservices/microservice-ddd-cqrs-patterns/
+> - [Domain-Driven Design: The Blue Book](https://www.domainlanguage.com/ddd/blue-book/) — Eric Evans (2003)
+> - [Implementing Domain-Driven Design](https://www.amazon.com/Implementing-Domain-Driven-Design-Vaughn-Vernon/dp/0321834577) — Vaughn Vernon (2013)
+> - [Effective Aggregate Design](https://www.dddcommunity.org/library/vernon_2011/) — Vaughn Vernon
+> - [Repository Pattern](https://martinfowler.com/eaaCatalog/repository.html) — Martin Fowler (PoEAA)
 
 ## Building Blocks Overview
 
@@ -39,75 +40,33 @@ An object with **identity** that persists through time. Two entities are equal i
 - Can change attributes but remains the same entity
 - Contains behavior (not just data)
 
-### Implementation
+### Pattern
 
-```typescript
-// domain/shared/entity.ts
-export abstract class Entity<T> {
-  protected readonly _id: T;
+```
+abstract class Entity<ID>:
+    id: ID
 
-  protected constructor(id: T) {
-    this._id = id;
-  }
+    equals(other: Entity<ID>) -> bool:
+        return this.id == other.id
 
-  get id(): T {
-    return this._id;
-  }
+class OrderItem extends Entity<OrderItemId>:
+    productId: ProductId
+    quantity: Quantity
+    unitPrice: Money
 
-  equals(other: Entity<T>): boolean {
-    if (other === null || other === undefined) {
-      return false;
-    }
-    if (!(other instanceof Entity)) {
-      return false;
-    }
-    return this._id === other._id;
-  }
-}
+    static create(productId, quantity, unitPrice) -> OrderItem:
+        return new OrderItem(
+            id: OrderItemId.generate(),
+            productId: productId,
+            quantity: quantity,
+            unitPrice: unitPrice
+        )
 
-// domain/order/order_item.ts
-export class OrderItem extends Entity<OrderItemId> {
-  private _productId: ProductId;
-  private _quantity: Quantity;
-  private _unitPrice: Money;
+    increaseQuantity(amount: int):
+        this.quantity = this.quantity.add(amount)
 
-  private constructor(
-    id: OrderItemId,
-    productId: ProductId,
-    quantity: Quantity,
-    unitPrice: Money,
-  ) {
-    super(id);
-    this._productId = productId;
-    this._quantity = quantity;
-    this._unitPrice = unitPrice;
-  }
-
-  static create(
-    productId: ProductId,
-    quantity: Quantity,
-    unitPrice: Money,
-  ): OrderItem {
-    return new OrderItem(
-      OrderItemId.generate(),
-      productId,
-      quantity,
-      unitPrice,
-    );
-  }
-
-  increaseQuantity(amount: number): void {
-    this._quantity = this._quantity.add(amount);
-  }
-
-  get subtotal(): Money {
-    return this._unitPrice.multiply(this._quantity.value);
-  }
-
-  get productId(): ProductId { return this._productId; }
-  get quantity(): Quantity { return this._quantity; }
-  get unitPrice(): Money { return this._unitPrice; }
-}
+    subtotal() -> Money:
+        return this.unitPrice.multiply(this.quantity.value)
 ```
 
 ---
@@ -133,133 +92,55 @@ An object defined by its **attributes**, not identity. Two value objects are equ
 | Address | street, city, zip, country | required fields |
 | DateRange | start, end | start <= end |
 | Quantity | value | value > 0 |
-| PhoneNumber | countryCode, number | valid format |
 
-### Implementation
+### Pattern
 
-```typescript
-// domain/shared/value_object.ts
-export abstract class ValueObject<T> {
-  protected readonly props: T;
+```
+abstract class ValueObject<Props>:
+    props: Props
 
-  protected constructor(props: T) {
-    this.props = Object.freeze(props);
-  }
+    equals(other: ValueObject<Props>) -> bool:
+        return deepEqual(this.props, other.props)
 
-  equals(other: ValueObject<T>): boolean {
-    if (other === null || other === undefined) {
-      return false;
-    }
-    return JSON.stringify(this.props) === JSON.stringify(other.props);
-  }
-}
+class Money extends ValueObject<{amount, currency}>:
 
-// domain/shared/money.ts
-interface MoneyProps {
-  amount: number;
-  currency: string;
-}
+    static create(amount, currency) -> Money:
+        guard: amount >= 0
+        guard: currency in SUPPORTED_CURRENCIES
+        return new Money({amount, currency})
 
-export class Money extends ValueObject<MoneyProps> {
-  private constructor(props: MoneyProps) {
-    super(props);
-  }
+    static zero(currency = "USD") -> Money:
+        return Money.create(0, currency)
 
-  static create(amount: number, currency: string): Money {
-    if (amount < 0) {
-      throw new InvalidMoneyError('Amount cannot be negative');
-    }
-    if (!['USD', 'EUR', 'GBP'].includes(currency)) {
-      throw new InvalidMoneyError(`Unsupported currency: ${currency}`);
-    }
-    return new Money({ amount, currency });
-  }
+    add(other: Money) -> Money:
+        guard: this.currency == other.currency
+        return Money.create(this.amount + other.amount, this.currency)
 
-  static zero(currency: string = 'USD'): Money {
-    return new Money({ amount: 0, currency });
-  }
+    subtract(other: Money) -> Money:
+        guard: this.currency == other.currency
+        return Money.create(this.amount - other.amount, this.currency)
 
-  static fromCents(cents: number, currency: string): Money {
-    return Money.create(cents / 100, currency);
-  }
+    multiply(factor: number) -> Money:
+        return Money.create(this.amount * factor, this.currency)
 
-  add(other: Money): Money {
-    this.assertSameCurrency(other);
-    return Money.create(this.amount + other.amount, this.currency);
-  }
+class Email extends ValueObject<{value}>:
 
-  subtract(other: Money): Money {
-    this.assertSameCurrency(other);
-    return Money.create(this.amount - other.amount, this.currency);
-  }
+    static create(email: string) -> Email:
+        normalized = email.lowercase().trim()
+        guard: isValidEmailFormat(normalized)
+        return new Email({value: normalized})
 
-  multiply(factor: number): Money {
-    return Money.create(this.amount * factor, this.currency);
-  }
+    domain() -> string:
+        return this.value.split("@")[1]
 
-  private assertSameCurrency(other: Money): void {
-    if (this.currency !== other.currency) {
-      throw new CurrencyMismatchError(this.currency, other.currency);
-    }
-  }
+class OrderId extends ValueObject<{value}>:
 
-  get amount(): number { return this.props.amount; }
-  get currency(): string { return this.props.currency; }
-  get cents(): number { return Math.round(this.amount * 100); }
-}
+    static generate() -> OrderId:
+        return new OrderId({value: generateUUID()})
 
-// domain/shared/email.ts
-interface EmailProps {
-  value: string;
-}
-
-export class Email extends ValueObject<EmailProps> {
-  private static readonly EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-  private constructor(props: EmailProps) {
-    super(props);
-  }
-
-  static create(email: string): Email {
-    const normalized = email.toLowerCase().trim();
-    if (!Email.EMAIL_REGEX.test(normalized)) {
-      throw new InvalidEmailError(email);
-    }
-    return new Email({ value: normalized });
-  }
-
-  get value(): string { return this.props.value; }
-  get domain(): string { return this.value.split('@')[1]; }
-}
-
-// domain/order/value_objects.ts
-export class OrderId extends ValueObject<{ value: string }> {
-  private constructor(value: string) {
-    super({ value });
-  }
-
-  static generate(): OrderId {
-    return new OrderId(crypto.randomUUID());
-  }
-
-  static from(value: string): OrderId {
-    if (!value || value.trim() === '') {
-      throw new InvalidOrderIdError('Order ID cannot be empty');
-    }
-    return new OrderId(value);
-  }
-
-  get value(): string { return this.props.value; }
-}
-
-export enum OrderStatus {
-  Draft = 'draft',
-  Pending = 'pending',
-  Confirmed = 'confirmed',
-  Shipped = 'shipped',
-  Delivered = 'delivered',
-  Cancelled = 'cancelled',
-}
+    static from(value: string) -> OrderId:
+        guard: value is not empty
+        return new OrderId({value})
 ```
 
 ---
@@ -271,10 +152,24 @@ A cluster of entities and value objects treated as a single unit for data change
 ### Rules
 
 1. **One aggregate root** - Single entry point for all modifications
-2. **Reference by ID** - Aggregates reference others only by identity
-3. **Transaction boundary** - One aggregate per transaction
+2. **Reference by ID only** - Aggregates reference others by identity, never by direct object reference
+3. **Transaction boundary** - One aggregate per transaction (eventual consistency between aggregates)
 4. **Invariants within boundary** - Aggregate ensures its own consistency
 5. **Small aggregates** - Prefer smaller over larger
+
+### Aggregate Sizing Heuristics
+
+| Metric | Healthy | Warning | Action |
+|--------|---------|---------|--------|
+| Entities per aggregate | 1-5 | 6-10 | >10: Split |
+| Lines of code (root) | <500 | 500-1000 | >1000: Split |
+| Transaction lock time | <100ms | 100-500ms | >500ms: Split |
+| Concurrent modification conflicts | Rare | Occasional | Frequent: Split |
+
+**Questions to ask:**
+- Can parts be eventually consistent? → Separate aggregates
+- Do all parts change together? → Same aggregate
+- Are there independent lifecycles? → Separate aggregates
 
 ### Design Guidelines
 
@@ -317,183 +212,88 @@ flowchart TB
     style GodOrder fill:#ef4444,stroke:#dc2626,color:white
 ```
 
-*❌ Too large, too many reasons to change, contention issues*
+*Too large, too many reasons to change, contention issues*
 
-### Implementation
+### Pattern
 
-```typescript
-// domain/shared/aggregate_root.ts
-export abstract class AggregateRoot<T> extends Entity<T> {
-  private _domainEvents: DomainEvent[] = [];
-  private _version: number = 0;
+```
+abstract class AggregateRoot<ID> extends Entity<ID>:
+    domainEvents: List<DomainEvent> = []
+    version: int = 0
 
-  protected addDomainEvent(event: DomainEvent): void {
-    this._domainEvents.push(event);
-  }
+    addDomainEvent(event: DomainEvent):
+        this.domainEvents.append(event)
 
-  get domainEvents(): ReadonlyArray<DomainEvent> {
-    return this._domainEvents;
-  }
+    clearDomainEvents():
+        this.domainEvents = []
 
-  clearDomainEvents(): void {
-    this._domainEvents = [];
-  }
+class Order extends AggregateRoot<OrderId>:
+    customerId: CustomerId
+    items: List<OrderItem> = []
+    status: OrderStatus
+    shippingAddress: Address | null
+    createdAt: DateTime
 
-  get version(): number {
-    return this._version;
-  }
+    static create(customerId: CustomerId) -> Order:
+        order = new Order(
+            id: OrderId.generate(),
+            customerId: customerId,
+            status: DRAFT,
+            createdAt: now()
+        )
+        order.addDomainEvent(OrderCreated{orderId, customerId})
+        return order
 
-  incrementVersion(): void {
-    this._version++;
-  }
-}
+    static reconstitute(id, customerId, items, status, ...) -> Order:
+        order = new Order(...)
+        return order
 
-// domain/order/order.ts
-export class Order extends AggregateRoot<OrderId> {
-  private _customerId: CustomerId;
-  private _items: OrderItem[] = [];
-  private _status: OrderStatus;
-  private _shippingAddress: Address | null = null;
-  private _createdAt: Date;
-  private _confirmedAt: Date | null = null;
+    addItem(productId, quantity, unitPrice):
+        guard: status != CANCELLED
+        guard: status != SHIPPED
+        guard: quantity > 0
 
-  private constructor(id: OrderId, customerId: CustomerId) {
-    super(id);
-    this._customerId = customerId;
-    this._status = OrderStatus.Draft;
-    this._createdAt = new Date();
-  }
+        existingItem = this.items.find(i => i.productId == productId)
+        if existingItem:
+            existingItem.increaseQuantity(quantity)
+        else:
+            this.items.append(OrderItem.create(productId, quantity, unitPrice))
 
-  // Factory method - single entry point for creation
-  static create(customerId: CustomerId): Order {
-    const order = new Order(OrderId.generate(), customerId);
-    order.addDomainEvent(new OrderCreated(order.id, customerId));
-    return order;
-  }
+        this.addDomainEvent(OrderItemAdded{orderId, productId, quantity})
 
-  // Reconstitution from persistence (no events)
-  static reconstitute(
-    id: OrderId,
-    customerId: CustomerId,
-    items: OrderItem[],
-    status: OrderStatus,
-    shippingAddress: Address | null,
-    createdAt: Date,
-    confirmedAt: Date | null,
-    version: number,
-  ): Order {
-    const order = new Order(id, customerId);
-    order._items = items;
-    order._status = status;
-    order._shippingAddress = shippingAddress;
-    order._createdAt = createdAt;
-    order._confirmedAt = confirmedAt;
-    order._version = version;
-    return order;
-  }
+    removeItem(productId):
+        guard: status != CANCELLED
+        guard: status != SHIPPED
+        guard: item exists
 
-  // Business operations with invariant enforcement
-  addItem(productId: ProductId, quantity: Quantity, unitPrice: Money): void {
-    this.assertNotCancelled();
-    this.assertNotShipped();
+        this.items.remove(productId)
+        this.addDomainEvent(OrderItemRemoved{orderId, productId})
 
-    const existingItem = this._items.find(i => i.productId.equals(productId));
-    if (existingItem) {
-      existingItem.increaseQuantity(quantity.value);
-    } else {
-      this._items.push(OrderItem.create(productId, quantity, unitPrice));
-    }
+    confirm():
+        guard: status == DRAFT
+        guard: items.length > 0
+        guard: shippingAddress != null
 
-    this.addDomainEvent(new OrderItemAdded(this.id, productId, quantity));
-  }
+        this.status = CONFIRMED
+        this.addDomainEvent(OrderConfirmed{orderId, total})
 
-  removeItem(productId: ProductId): void {
-    this.assertNotCancelled();
-    this.assertNotShipped();
+    ship(trackingNumber):
+        guard: status == CONFIRMED
 
-    const index = this._items.findIndex(i => i.productId.equals(productId));
-    if (index === -1) {
-      throw new OrderItemNotFoundError(this.id, productId);
-    }
+        this.status = SHIPPED
+        this.addDomainEvent(OrderShipped{orderId, trackingNumber})
 
-    this._items.splice(index, 1);
-    this.addDomainEvent(new OrderItemRemoved(this.id, productId));
-  }
+    cancel(reason: string):
+        guard: status not in [SHIPPED, DELIVERED]
 
-  setShippingAddress(address: Address): void {
-    this.assertNotCancelled();
-    this.assertNotShipped();
-    this._shippingAddress = address;
-  }
+        this.status = CANCELLED
+        this.addDomainEvent(OrderCancelled{orderId, reason})
 
-  confirm(): void {
-    this.assertNotCancelled();
-    if (this._status !== OrderStatus.Draft) {
-      throw new InvalidOrderStateError('Can only confirm draft orders');
-    }
-    if (this._items.length === 0) {
-      throw new EmptyOrderError('Cannot confirm empty order');
-    }
-    if (!this._shippingAddress) {
-      throw new MissingShippingAddressError();
-    }
+    total() -> Money:
+        return this.items.reduce((sum, item) => sum.add(item.subtotal()), Money.zero())
 
-    this._status = OrderStatus.Confirmed;
-    this._confirmedAt = new Date();
-    this.addDomainEvent(new OrderConfirmed(this.id, this.total));
-  }
-
-  ship(trackingNumber: TrackingNumber): void {
-    if (this._status !== OrderStatus.Confirmed) {
-      throw new InvalidOrderStateError('Can only ship confirmed orders');
-    }
-
-    this._status = OrderStatus.Shipped;
-    this.addDomainEvent(new OrderShipped(this.id, trackingNumber));
-  }
-
-  cancel(reason: string): void {
-    if (this._status === OrderStatus.Shipped || this._status === OrderStatus.Delivered) {
-      throw new InvalidOrderStateError('Cannot cancel shipped/delivered orders');
-    }
-
-    this._status = OrderStatus.Cancelled;
-    this.addDomainEvent(new OrderCancelled(this.id, reason));
-  }
-
-  // Invariant guards
-  private assertNotCancelled(): void {
-    if (this._status === OrderStatus.Cancelled) {
-      throw new InvalidOrderStateError('Order is cancelled');
-    }
-  }
-
-  private assertNotShipped(): void {
-    if (this._status === OrderStatus.Shipped || this._status === OrderStatus.Delivered) {
-      throw new InvalidOrderStateError('Order is already shipped');
-    }
-  }
-
-  // Computed properties
-  get total(): Money {
-    return this._items.reduce(
-      (sum, item) => sum.add(item.subtotal),
-      Money.zero()
-    );
-  }
-
-  get itemCount(): number {
-    return this._items.reduce((sum, item) => sum + item.quantity.value, 0);
-  }
-
-  // Getters (read-only access)
-  get customerId(): CustomerId { return this._customerId; }
-  get items(): ReadonlyArray<OrderItem> { return this._items; }
-  get status(): OrderStatus { return this._status; }
-  get shippingAddress(): Address | null { return this._shippingAddress; }
-  get createdAt(): Date { return this._createdAt; }
-  get confirmedAt(): Date | null { return this._confirmedAt; }
-}
+    itemCount() -> int:
+        return this.items.reduce((sum, item) => sum + item.quantity.value, 0)
 ```
 
 ---
@@ -509,59 +309,52 @@ Provides collection-like access to aggregates. Abstracts persistence.
 3. **Aggregate-focused** - Save/load entire aggregates
 4. **No query logic** - Complex queries belong in separate read models
 
-### Interface Design
+### Pattern
 
-```typescript
-// domain/order/repository.ts
-export interface IOrderRepository {
-  // Retrieval
-  findById(id: OrderId): Promise<Order | null>;
-  findByCustomerId(customerId: CustomerId): Promise<Order[]>;
+```
+interface OrderRepository:
+    findById(id: OrderId) -> Order | null
+    findByCustomerId(customerId: CustomerId) -> List<Order>
+    save(order: Order)
+    delete(order: Order)
+    nextId() -> OrderId
 
-  // Persistence
-  save(order: Order): Promise<void>;
-  delete(order: Order): Promise<void>;
-
-  // Identity generation (optional)
-  nextId(): OrderId;
-}
-
-// domain/shared/repository.ts
-export interface IRepository<T extends AggregateRoot<ID>, ID> {
-  findById(id: ID): Promise<T | null>;
-  save(aggregate: T): Promise<void>;
-  delete(aggregate: T): Promise<void>;
-}
+interface Repository<T extends AggregateRoot<ID>, ID>:
+    findById(id: ID) -> T | null
+    save(aggregate: T)
+    delete(aggregate: T)
 ```
 
 ### Common Mistakes
 
-```typescript
-// ❌ Wrong: Repository per entity (not aggregate)
-interface IOrderItemRepository {
-  findByOrderId(orderId: OrderId): Promise<OrderItem[]>;
-  save(item: OrderItem): Promise<void>;
-}
+**Wrong: Repository per entity**
 
-// ❌ Wrong: Query methods that bypass aggregate
-interface IOrderRepository {
-  findByStatus(status: OrderStatus): Promise<Order[]>;
-  findByDateRange(start: Date, end: Date): Promise<Order[]>;
-  countByCustomer(customerId: CustomerId): Promise<number>;
-}
+```
+interface OrderItemRepository:
+    findByOrderId(orderId) -> List<OrderItem>
+    save(item: OrderItem)
+```
 
-// ✅ Correct: Aggregate-focused + separate read model
-interface IOrderRepository {
-  findById(id: OrderId): Promise<Order | null>;
-  save(order: Order): Promise<void>;
-}
+**Wrong: Query methods in repository**
 
-// ✅ Complex queries in separate read model
-interface IOrderReadModel {
-  findByStatus(status: OrderStatus): Promise<OrderSummaryDTO[]>;
-  findByDateRange(start: Date, end: Date): Promise<OrderSummaryDTO[]>;
-  countByCustomer(customerId: CustomerId): Promise<number>;
-}
+```
+interface OrderRepository:
+    findByStatus(status) -> List<Order>
+    findByDateRange(start, end)
+    countByCustomer(customerId)
+```
+
+**Correct: Aggregate-focused + separate read model**
+
+```
+interface OrderRepository:
+    findById(id: OrderId) -> Order | null
+    save(order: Order)
+
+interface OrderReadModel:
+    findByStatus(status) -> List<OrderSummaryDTO>
+    findByDateRange(start, end) -> List<OrderSummaryDTO>
+    countByCustomer(customerId) -> int
 ```
 
 ---
@@ -577,80 +370,36 @@ Records something significant that happened in the domain.
 - Contains data needed by consumers
 - Timestamp when it occurred
 
-### Implementation
+### Pattern
 
-```typescript
-// domain/shared/domain_event.ts
-export abstract class DomainEvent {
-  readonly eventId: string;
-  readonly occurredAt: Date;
-  abstract readonly eventType: string;
+```
+abstract class DomainEvent:
+    eventId: string = generateUUID()
+    occurredAt: DateTime = now()
+    abstract eventType: string
 
-  protected constructor() {
-    this.eventId = crypto.randomUUID();
-    this.occurredAt = new Date();
-  }
+    abstract toPayload() -> Map
 
-  abstract toPayload(): Record<string, unknown>;
-}
+class OrderCreated extends DomainEvent:
+    eventType = "order.created"
+    orderId: OrderId
+    customerId: CustomerId
 
-// domain/order/events.ts
-export class OrderCreated extends DomainEvent {
-  readonly eventType = 'order.created';
+    toPayload():
+        return {orderId: orderId.value, customerId: customerId.value}
 
-  constructor(
-    readonly orderId: OrderId,
-    readonly customerId: CustomerId,
-  ) {
-    super();
-  }
+class OrderConfirmed extends DomainEvent:
+    eventType = "order.confirmed"
+    orderId: OrderId
+    total: Money
 
-  toPayload(): Record<string, unknown> {
-    return {
-      orderId: this.orderId.value,
-      customerId: this.customerId.value,
-    };
-  }
-}
+    toPayload():
+        return {orderId: orderId.value, total: {amount, currency}}
 
-export class OrderConfirmed extends DomainEvent {
-  readonly eventType = 'order.confirmed';
-
-  constructor(
-    readonly orderId: OrderId,
-    readonly total: Money,
-  ) {
-    super();
-  }
-
-  toPayload(): Record<string, unknown> {
-    return {
-      orderId: this.orderId.value,
-      total: {
-        amount: this.total.amount,
-        currency: this.total.currency,
-      },
-    };
-  }
-}
-
-export class OrderShipped extends DomainEvent {
-  readonly eventType = 'order.shipped';
-
-  constructor(
-    readonly orderId: OrderId,
-    readonly trackingNumber: TrackingNumber,
-  ) {
-    super();
-  }
-
-  toPayload(): Record<string, unknown> {
-    return {
-      orderId: this.orderId.value,
-      trackingNumber: this.trackingNumber.value,
-    };
-  }
-}
+class OrderShipped extends DomainEvent:
+    eventType = "order.shipped"
+    orderId: OrderId
+    trackingNumber: TrackingNumber
 ```
 
 ---
@@ -665,55 +414,41 @@ Stateless operations that don't naturally fit within an entity or value object.
 - Operation requires external information
 - Significant business logic that doesn't belong to one entity
 
-### Implementation
+### Pattern
 
-```typescript
-// domain/order/services/pricing_service.ts
-export interface IPricingService {
-  calculateDiscount(order: Order, customer: Customer): Money;
-}
+```
+interface PricingService:
+    calculateDiscount(order: Order, customer: Customer) -> Money
 
-export class PricingService implements IPricingService {
-  calculateDiscount(order: Order, customer: Customer): Money {
-    let discount = Money.zero();
+class PricingServiceImpl implements PricingService:
 
-    // Volume discount
-    if (order.itemCount > 10) {
-      discount = discount.add(order.total.multiply(0.05));
-    }
+    calculateDiscount(order, customer) -> Money:
+        discount = Money.zero()
 
-    // Loyalty discount
-    if (customer.isVIP) {
-      discount = discount.add(order.total.multiply(0.10));
-    }
+        if order.itemCount() > 10:
+            discount = discount.add(order.total().multiply(0.05))
 
-    // Cap at 20%
-    const maxDiscount = order.total.multiply(0.20);
-    return discount.amount > maxDiscount.amount ? maxDiscount : discount;
-  }
-}
+        if customer.isVIP:
+            discount = discount.add(order.total().multiply(0.10))
 
-// domain/shipping/services/shipping_cost_calculator.ts
-export interface IShippingCostCalculator {
-  calculate(items: ReadonlyArray<OrderItem>, destination: Address): Money;
-}
+        maxDiscount = order.total().multiply(0.20)
+        return min(discount, maxDiscount)
 
-export class ShippingCostCalculator implements IShippingCostCalculator {
-  calculate(items: ReadonlyArray<OrderItem>, destination: Address): Money {
-    const baseRate = Money.create(5.99, 'USD');
-    const perItemRate = Money.create(1.50, 'USD');
+interface ShippingCostCalculator:
+    calculate(items: List<OrderItem>, destination: Address) -> Money
 
-    const itemCost = perItemRate.multiply(items.length);
-    let total = baseRate.add(itemCost);
+class ShippingCostCalculatorImpl implements ShippingCostCalculator:
 
-    // International shipping surcharge
-    if (destination.country !== 'US') {
-      total = total.add(Money.create(15.00, 'USD'));
-    }
+    calculate(items, destination) -> Money:
+        baseRate = Money.create(5.99, "USD")
+        perItemRate = Money.create(1.50, "USD")
 
-    return total;
-  }
-}
+        total = baseRate.add(perItemRate.multiply(items.length))
+
+        if destination.country != "US":
+            total = total.add(Money.create(15.00, "USD"))
+
+        return total
 ```
 
 ---
@@ -728,41 +463,31 @@ Encapsulates complex aggregate/entity creation.
 - Need to enforce invariants during creation
 - Need to create object graphs
 
-### Implementation
+### Pattern
 
-```typescript
-// domain/order/order_factory.ts
-export interface IOrderFactory {
-  createFromCart(cart: Cart, customer: Customer): Order;
-}
+```
+interface OrderFactory:
+    createFromCart(cart: Cart, customer: Customer) -> Order
 
-export class OrderFactory implements IOrderFactory {
-  constructor(
-    private readonly pricingService: IPricingService,
-  ) {}
+class OrderFactoryImpl implements OrderFactory:
+    pricingService: PricingService
 
-  createFromCart(cart: Cart, customer: Customer): Order {
-    if (cart.isEmpty) {
-      throw new EmptyCartError();
-    }
+    createFromCart(cart, customer) -> Order:
+        guard: not cart.isEmpty
 
-    const order = Order.create(customer.id);
+        order = Order.create(customer.id)
 
-    for (const cartItem of cart.items) {
-      order.addItem(
-        cartItem.productId,
-        Quantity.create(cartItem.quantity),
-        cartItem.unitPrice,
-      );
-    }
+        for cartItem in cart.items:
+            order.addItem(
+                cartItem.productId,
+                Quantity.create(cartItem.quantity),
+                cartItem.unitPrice
+            )
 
-    if (customer.defaultAddress) {
-      order.setShippingAddress(customer.defaultAddress);
-    }
+        if customer.defaultAddress:
+            order.setShippingAddress(customer.defaultAddress)
 
-    return order;
-  }
-}
+        return order
 ```
 
 ---
@@ -771,51 +496,27 @@ export class OrderFactory implements IOrderFactory {
 
 Encapsulates business rules for querying or validation.
 
-```typescript
-// domain/shared/specification.ts
-export interface ISpecification<T> {
-  isSatisfiedBy(candidate: T): boolean;
-  and(other: ISpecification<T>): ISpecification<T>;
-  or(other: ISpecification<T>): ISpecification<T>;
-  not(): ISpecification<T>;
-}
+```
+interface Specification<T>:
+    isSatisfiedBy(candidate: T) -> bool
+    and(other: Specification<T>) -> Specification<T>
+    or(other: Specification<T>) -> Specification<T>
+    not() -> Specification<T>
 
-export abstract class Specification<T> implements ISpecification<T> {
-  abstract isSatisfiedBy(candidate: T): boolean;
+class OrderOverValueSpec implements Specification<Order>:
+    minValue: Money
 
-  and(other: ISpecification<T>): ISpecification<T> {
-    return new AndSpecification(this, other);
-  }
+    isSatisfiedBy(order) -> bool:
+        return order.total().amount >= minValue.amount
 
-  or(other: ISpecification<T>): ISpecification<T> {
-    return new OrSpecification(this, other);
-  }
+class OrderHasItemsSpec implements Specification<Order>:
 
-  not(): ISpecification<T> {
-    return new NotSpecification(this);
-  }
-}
+    isSatisfiedBy(order) -> bool:
+        return order.items.length > 0
 
-// domain/order/specifications.ts
-export class OrderOverValueSpec extends Specification<Order> {
-  constructor(private readonly minValue: Money) {}
+canShipFree = OrderOverValueSpec(Money.create(100, "USD"))
+    .and(OrderHasItemsSpec())
 
-  isSatisfiedBy(order: Order): boolean {
-    return order.total.amount >= this.minValue.amount;
-  }
-}
-
-export class OrderHasItemsSpec extends Specification<Order> {
-  isSatisfiedBy(order: Order): boolean {
-    return order.items.length > 0;
-  }
-}
-
-// Usage
-const canShipFree = new OrderOverValueSpec(Money.create(100, 'USD'))
-  .and(new OrderHasItemsSpec());
-
-if (canShipFree.isSatisfiedBy(order)) {
-  // Apply free shipping
-}
+if canShipFree.isSatisfiedBy(order):
+    applyFreeShipping()
 ```

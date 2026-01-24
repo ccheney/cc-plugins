@@ -1,18 +1,20 @@
 # FSD Public API Patterns
 
-> Source: https://feature-sliced.design/docs/reference/public-api
+> **Source:** [Public API Reference](https://feature-sliced.design/docs/reference/public-api)
 
 ## What is a Public API?
 
-A public API is a **contract** between a slice and the code that uses it. It acts as a gateway, controlling which objects are accessible and how they can be imported.
+A public API is a **contract** between a slice and consuming code. It controls which objects are accessible and how they can be imported.
 
-**Implementation:** Typically an `index.ts` barrel file with explicit re-exports.
+**Implementation:** An `index.ts` barrel file with explicit re-exports.
+
+---
 
 ## Three Goals of Quality Public APIs
 
-1. **Protection from structural changes** - Shield the rest of the application from internal slice refactoring
-2. **Behavioral transparency** - Significant behavior changes should reflect in the public API
-3. **Selective exposure** - Only necessary components should be exposed
+1. **Protection from structural changes** — Shield consumers from internal refactoring
+2. **Behavioral transparency** — Significant changes reflect in the API
+3. **Selective exposure** — Only necessary parts exposed
 
 ---
 
@@ -28,31 +30,26 @@ export { userSchema } from './model/schema';
 ```
 
 **Usage:**
-
 ```typescript
-// In features/auth/ui/ProfileSection.tsx
 import { UserCard, type User } from '@/entities/user';
-// NOT: import { UserCard } from '@/entities/user/ui/UserCard';
 ```
 
 ---
 
-## Anti-Pattern: Wildcard Exports
+## Avoid Wildcard Exports
 
-**Avoid this:**
-
+**Don't do this:**
 ```typescript
-// entities/user/index.ts
 export * from './ui';
 export * from './api';
 export * from './model';
 ```
 
 **Problems:**
-- Reduces discoverability of slice interface
-- Accidentally exposes internal implementation
-- Complicates future refactoring
-- Makes tree-shaking less effective
+- Reduces discoverability
+- Accidentally exposes internals
+- Complicates refactoring
+- Harms tree-shaking
 
 ---
 
@@ -65,15 +62,15 @@ entities/user/
 ├── ui/
 │   ├── UserCard.tsx
 │   ├── UserAvatar.tsx
-│   └── index.ts        # UI segment public API
+│   └── index.ts
 ├── api/
 │   ├── userApi.ts
-│   └── index.ts        # API segment public API
+│   └── index.ts
 ├── model/
 │   ├── types.ts
 │   ├── schema.ts
-│   └── index.ts        # Model segment public API
-└── index.ts            # Slice public API (re-exports from segments)
+│   └── index.ts
+└── index.ts
 ```
 
 ```typescript
@@ -91,25 +88,26 @@ export * from './model';
 
 ## Cross-Imports with @x Notation
 
-When entities need to reference each other legitimately:
+> [Official @x Documentation](https://feature-sliced.design/docs/reference/public-api#public-api-for-cross-imports)
+
+When entities legitimately reference each other:
 
 ```
 entities/
 ├── song/
 │   ├── @x/
-│   │   └── artist.ts   # Special API for artist entity
+│   │   └── artist.ts
 │   ├── model/
 │   │   └── types.ts
 │   └── index.ts
 └── artist/
     ├── model/
-    │   └── types.ts    # Imports Song from @x
+    │   └── types.ts
     └── index.ts
 ```
 
 ```typescript
 // entities/song/@x/artist.ts
-// Only expose what artist needs
 export type { Song, SongId } from '../model/types';
 
 // entities/artist/model/types.ts
@@ -124,25 +122,24 @@ export interface Artist {
 **Guidelines for @x:**
 - Keep cross-imports minimal
 - Document why the cross-reference exists
-- Consider if entities should be merged
+- Consider merging entities if references are extensive
 - Use only on Entities layer
 
 ---
 
 ## Avoiding Circular Imports
 
-**Problem:** Within a slice, importing from the index file can cause circular dependencies.
+**Problem:** Importing from index within a slice causes circulars.
 
 ```typescript
-// entities/user/model/store.ts
-// BAD: Causes circular import
+// ❌
 import { UserCard } from '../index';
 
-// GOOD: Use direct relative import
+// ✅
 import { UserCard } from '../ui/UserCard';
 ```
 
-**Rule:** Within a slice, use relative imports. Only external consumers use the public API.
+**Rule:** Within a slice, use relative imports. External consumers use the public API.
 
 ---
 
@@ -161,45 +158,32 @@ shared/ui/
 ├── Modal/
 │   ├── Modal.tsx
 │   └── index.ts
-└── index.ts           # Re-exports all (optional)
+└── index.ts
 ```
 
 **Import patterns:**
-
 ```typescript
-// Full import (may bundle everything)
 import { Button, Input } from '@/shared/ui';
 
-// Selective import (better tree-shaking)
 import { Button } from '@/shared/ui/Button';
-import { Input } from '@/shared/ui/Input';
 ```
 
 ---
 
-## TypeScript Path Aliases
+## Index File Challenges
 
-Configure path aliases for clean imports:
+**Four major issues:**
 
-```json
-// tsconfig.json
-{
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    }
-  }
-}
-```
+1. **Circular imports** — Internal files reimporting from index
+2. **Tree-shaking failures** — Unrelated utilities bundled together
+3. **Weak enforcement** — Nothing prevents direct imports technically
+4. **Performance degradation** — Too many indices slow dev servers
 
-**Usage:**
-
-```typescript
-import { UserCard } from '@/entities/user';
-import { Button } from '@/shared/ui';
-import { AddToCart } from '@/features/add-to-cart';
-```
+**Solutions:**
+- Use relative imports within slices
+- Create separate indices per component in `shared/`
+- Review imports during code review
+- Consider monorepo for very large projects
 
 ---
 
@@ -220,7 +204,9 @@ export interface ProductFilters {
   minPrice?: number;
   maxPrice?: number;
 }
+```
 
+```typescript
 // entities/product/model/schema.ts
 import { z } from 'zod';
 
@@ -231,7 +217,9 @@ export const productSchema = z.object({
   imageUrl: z.string().url(),
   category: z.string(),
 });
+```
 
+```typescript
 // entities/product/api/productApi.ts
 import { apiClient } from '@/shared/api';
 import type { Product, ProductFilters } from '../model/types';
@@ -245,7 +233,9 @@ export async function getProductById(id: string): Promise<Product> {
   const { data } = await apiClient.get(`/products/${id}`);
   return data;
 }
+```
 
+```tsx
 // entities/product/ui/ProductCard.tsx
 import type { Product } from '../model/types';
 
@@ -263,15 +253,12 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
     </div>
   );
 }
+```
 
-// entities/product/index.ts (PUBLIC API)
-// UI exports
+```typescript
+// entities/product/index.ts
 export { ProductCard } from './ui/ProductCard';
-
-// API exports
 export { getProducts, getProductById } from './api/productApi';
-
-// Model exports
 export type { Product, ProductFilters } from './model/types';
 export { productSchema } from './model/schema';
 ```

@@ -1,14 +1,19 @@
 # Hexagonal Architecture (Ports & Adapters)
 
 > Sources:
-> - https://alistair.cockburn.us/hexagonal-architecture/
-> - Hexagonal Architecture Explained (Alistair Cockburn & Juan Manuel Garrido, 2024)
-> - https://jmgarridopaz.github.io/content/hexagonalarchitecture.html
+> - [Hexagonal Architecture](https://alistair.cockburn.us/hexagonal-architecture/) — Alistair Cockburn (2005)
+> - [Hexagonal Architecture Explained](https://www.amazon.com/Hexagonal-Architecture-Explained-Alistair-Cockburn/dp/173751978X) — Alistair Cockburn & Juan Manuel Garrido de Paz (2024)
+> - [Interview with Alistair Cockburn](https://jmgarridopaz.github.io/content/interviewalistair.html) — Juan Manuel Garrido de Paz
+> - [Hexagonal Architecture Pattern](https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/hexagonal-architecture.html) — AWS
 
 ## Core Concept
 
 > "Allow an application to equally be driven by users, programs, automated tests, or batch scripts, and to be developed and tested in isolation from its eventual run-time devices and databases."
 > — Alistair Cockburn
+
+**Design validation technique:** The pattern was designed with FIT testing in mind—business experts can write test cases before any GUI exists. If you can run your entire application from test fixtures, your hexagonal boundaries are correct.
+
+**The hexagon is conceptual.** Most applications have 2-4 ports, not six. The shape emphasizes that all external interactions go through ports, regardless of direction.
 
 ```mermaid
 flowchart TB
@@ -134,7 +139,6 @@ export class OrderController {
   ) {}
 
   async create(req: Request, res: Response): Promise<void> {
-    // Adapt HTTP request to port command
     const command: PlaceOrderCommand = {
       customerId: req.user.id,
       items: req.body.items.map((item: any) => ({
@@ -169,7 +173,6 @@ export class GrpcOrderService implements OrderServiceServer {
   async placeOrder(
     request: PlaceOrderRequest,
   ): Promise<PlaceOrderResponse> {
-    // Adapt gRPC request to port command
     const command: PlaceOrderCommand = {
       customerId: request.getCustomerId(),
       items: request.getItemsList().map(item => ({
@@ -213,7 +216,6 @@ export class OrderMessageHandler {
   constructor(private readonly placeOrder: IPlaceOrderPort) {}
 
   async handlePlaceOrderMessage(message: PlaceOrderMessage): Promise<void> {
-    // Adapt message to port command
     await this.placeOrder.execute({
       customerId: message.customerId,
       items: message.items,
@@ -226,151 +228,83 @@ export class OrderMessageHandler {
 
 Implement port interfaces using specific technologies.
 
-```typescript
-// infrastructure/adapters/driven/postgres/order_repository.ts
-import { Pool } from 'pg';
-import { IOrderRepositoryPort } from '@/application/ports/driven/order_repository_port';
-import { Order } from '@/domain/order/order';
-import { OrderMapper } from './mappers/order_mapper';
+```
+class PostgresOrderRepository implements IOrderRepositoryPort:
+    db: Database
 
-export class PostgresOrderRepository implements IOrderRepositoryPort {
-  constructor(private readonly pool: Pool) {}
+    findById(id: OrderId) -> Order | null:
+        row = db.orders.where(id: id.value).first()
+        if not row:
+            return null
+        return OrderMapper.toDomain(row)
 
-  async findById(id: OrderId): Promise<Order | null> {
-    const result = await this.pool.query(
-      'SELECT * FROM orders WHERE id = $1',
-      [id.value]
-    );
+    save(order: Order):
+        data = OrderMapper.toPersistence(order)
+        db.orders.upsert(data)
 
-    if (result.rows.length === 0) return null;
-    return OrderMapper.toDomain(result.rows[0]);
-  }
+    delete(order: Order):
+        db.orders.where(id: order.id.value).delete()
+```
 
-  async save(order: Order): Promise<void> {
-    const data = OrderMapper.toPersistence(order);
-    await this.pool.query(
-      `INSERT INTO orders (id, customer_id, status, total, created_at)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (id) DO UPDATE SET
-         status = EXCLUDED.status,
-         total = EXCLUDED.total`,
-      [data.id, data.customerId, data.status, data.total, data.createdAt]
-    );
-  }
+**In-Memory (for tests):**
 
-  async delete(order: Order): Promise<void> {
-    await this.pool.query('DELETE FROM orders WHERE id = $1', [order.id.value]);
-  }
-}
+```
+class InMemoryOrderRepository implements IOrderRepositoryPort:
+    orders: Map<string, Order> = {}
 
-// infrastructure/adapters/driven/in_memory/order_repository.ts
-import { IOrderRepositoryPort } from '@/application/ports/driven/order_repository_port';
+    findById(id: OrderId) -> Order | null:
+        return orders.get(id.value) or null
 
-export class InMemoryOrderRepository implements IOrderRepositoryPort {
-  private orders: Map<string, Order> = new Map();
+    save(order: Order):
+        orders.set(order.id.value, order)
 
-  async findById(id: OrderId): Promise<Order | null> {
-    return this.orders.get(id.value) ?? null;
-  }
+    delete(order: Order):
+        orders.delete(order.id.value)
 
-  async save(order: Order): Promise<void> {
-    this.orders.set(order.id.value, order);
-  }
+    clear():
+        orders.clear()
+```
 
-  async delete(order: Order): Promise<void> {
-    this.orders.delete(order.id.value);
-  }
+**Payment Gateway:**
 
-  // Test helpers
-  clear(): void {
-    this.orders.clear();
-  }
+```
+class StripePaymentGateway implements IPaymentGatewayPort:
+    stripe: StripeClient
 
-  getAll(): Order[] {
-    return Array.from(this.orders.values());
-  }
-}
+    charge(amount: Money, paymentMethod: PaymentMethod) -> PaymentResult:
+        try:
+            intent = stripe.paymentIntents.create({
+                amount: amount.cents,
+                currency: amount.currency,
+                paymentMethod: paymentMethod.stripeId,
+                confirm: true
+            })
+            return PaymentResult.success(PaymentId.from(intent.id))
+        catch CardError as error:
+            return PaymentResult.failed(error.message)
 
-// infrastructure/adapters/driven/stripe/payment_gateway.ts
-import Stripe from 'stripe';
-import { IPaymentGatewayPort } from '@/application/ports/driven/payment_gateway_port';
+    refund(paymentId: PaymentId, amount: Money) -> RefundResult:
+        refund = stripe.refunds.create({paymentIntent: paymentId.value, amount: amount.cents})
+        return RefundResult.success(RefundId.from(refund.id))
+```
 
-export class StripePaymentGateway implements IPaymentGatewayPort {
-  private readonly stripe: Stripe;
+**Event Publisher:**
 
-  constructor(apiKey: string) {
-    this.stripe = new Stripe(apiKey);
-  }
+```
+class RabbitMQEventPublisher implements IEventPublisherPort:
+    channel: Channel
 
-  async charge(amount: Money, paymentMethod: PaymentMethod): Promise<PaymentResult> {
-    try {
-      const paymentIntent = await this.stripe.paymentIntents.create({
-        amount: amount.cents,
-        currency: amount.currency.toLowerCase(),
-        payment_method: paymentMethod.stripeId,
-        confirm: true,
-      });
+    publish(event: DomainEvent):
+        channel.publish("domain_events", event.eventType, serialize({
+            eventId: event.eventId,
+            eventType: event.eventType,
+            occurredAt: event.occurredAt,
+            payload: event.toPayload()
+        }))
 
-      return PaymentResult.success(PaymentId.from(paymentIntent.id));
-    } catch (error) {
-      if (error instanceof Stripe.errors.StripeCardError) {
-        return PaymentResult.failed(error.message);
-      }
-      throw error;
-    }
-  }
-
-  async refund(paymentId: PaymentId, amount: Money): Promise<RefundResult> {
-    const refund = await this.stripe.refunds.create({
-      payment_intent: paymentId.value,
-      amount: amount.cents,
-    });
-
-    return RefundResult.success(RefundId.from(refund.id));
-  }
-}
-
-// infrastructure/adapters/driven/rabbitmq/event_publisher.ts
-import { Channel, Connection } from 'amqplib';
-import { IEventPublisherPort } from '@/application/ports/driven/event_publisher_port';
-
-export class RabbitMQEventPublisher implements IEventPublisherPort {
-  private channel: Channel | null = null;
-
-  constructor(private readonly connection: Connection) {}
-
-  async publish(event: DomainEvent): Promise<void> {
-    const channel = await this.getChannel();
-    const exchange = 'domain_events';
-    const routingKey = event.eventType;
-
-    await channel.assertExchange(exchange, 'topic', { durable: true });
-    channel.publish(
-      exchange,
-      routingKey,
-      Buffer.from(JSON.stringify({
-        eventId: event.eventId,
-        eventType: event.eventType,
-        occurredAt: event.occurredAt.toISOString(),
-        payload: event.toPayload(),
-      })),
-      { persistent: true }
-    );
-  }
-
-  async publishAll(events: DomainEvent[]): Promise<void> {
-    for (const event of events) {
-      await this.publish(event);
-    }
-  }
-
-  private async getChannel(): Promise<Channel> {
-    if (!this.channel) {
-      this.channel = await this.connection.createChannel();
-    }
-    return this.channel;
-  }
-}
+    publishAll(events: List<DomainEvent>):
+        for event in events:
+            publish(event)
 ```
 
 ---
@@ -476,9 +410,7 @@ The power of hexagonal architecture: swap adapters without changing the core.
 ```typescript
 // infrastructure/config/container.ts
 
-// Development configuration
 function configureDevelopment(container: Container): void {
-  // Use in-memory adapters for fast local development
   container.bind<IOrderRepositoryPort>('IOrderRepositoryPort')
     .to(InMemoryOrderRepository);
   container.bind<IEventPublisherPort>('IEventPublisherPort')
@@ -487,9 +419,7 @@ function configureDevelopment(container: Container): void {
     .to(FakePaymentGateway);
 }
 
-// Testing configuration
 function configureTest(container: Container): void {
-  // Use in-memory adapters with spy capabilities
   container.bind<IOrderRepositoryPort>('IOrderRepositoryPort')
     .to(InMemoryOrderRepository);
   container.bind<IEventPublisherPort>('IEventPublisherPort')
@@ -498,9 +428,7 @@ function configureTest(container: Container): void {
     .to(MockPaymentGateway);
 }
 
-// Production configuration
 function configureProduction(container: Container): void {
-  // Use real adapters
   container.bind<IOrderRepositoryPort>('IOrderRepositoryPort')
     .to(PostgresOrderRepository);
   container.bind<IEventPublisherPort>('IEventPublisherPort')
@@ -509,10 +437,9 @@ function configureProduction(container: Container): void {
     .to(StripePaymentGateway);
 }
 
-// Swap database without touching application code
 function configureWithMongoDB(container: Container): void {
   container.bind<IOrderRepositoryPort>('IOrderRepositoryPort')
-    .to(MongoDBOrderRepository);  // Just change this line
+    .to(MongoDBOrderRepository);
 }
 ```
 

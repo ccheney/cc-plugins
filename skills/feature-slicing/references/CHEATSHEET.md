@@ -1,55 +1,51 @@
-# FSD Quick Reference Cheatsheet
+# FSD Quick Reference
 
-## Layer Hierarchy (Top → Bottom)
+> **Sources:** [Tutorial](https://feature-sliced.design/docs/get-started/tutorial) | [Layers](https://feature-sliced.design/docs/reference/layers) | [Slices & Segments](https://feature-sliced.design/docs/reference/slices-segments)
 
-```mermaid
-flowchart TB
-    subgraph LAYERS[" "]
-        direction TB
-        APP[app/<br/>Global: routing, providers, styles]:::app
-        PAGES[pages/<br/>Routes: one slice per screen]:::pages
-        WIDGETS[widgets/<br/>Composed: reusable UI blocks]:::widgets
-        FEATURES[features/<br/>Actions: user interactions]:::features
-        ENTITIES[entities/<br/>Data: business domain models]:::entities
-        SHARED[shared/<br/>Utils: project-agnostic code]:::shared
-    end
+## Layer Hierarchy
 
-    APP --> PAGES --> WIDGETS --> FEATURES --> ENTITIES --> SHARED
-
-    classDef app fill:#ef4444,stroke:#b91c1c,color:white
-    classDef pages fill:#f97316,stroke:#c2410c,color:white
-    classDef widgets fill:#eab308,stroke:#a16207,color:white
-    classDef features fill:#22c55e,stroke:#15803d,color:white
-    classDef entities fill:#3b82f6,stroke:#1d4ed8,color:white
-    classDef shared fill:#8b5cf6,stroke:#6d28d9,color:white
+```
+app/      → Providers, routing, global styles       [NO slices, REQUIRED]
+pages/    → Route screens, one slice per route      [HAS slices, REQUIRED]
+widgets/  → Complex reusable UI blocks              [HAS slices, optional]
+features/ → User interactions with business value   [HAS slices, optional]
+entities/ → Business domain models                  [HAS slices, optional]
+shared/   → Project-agnostic infrastructure         [NO slices, REQUIRED]
 ```
 
-**Rule:** Import only from layers BELOW. Never sideways or up.
+**Import Rule:** Only import from layers BELOW. Never sideways or up.
 
 ---
 
-## Quick Decision Tree
+## Import Matrix
+
+|  | app | pages | widgets | features | entities | shared |
+|--|-----|-------|---------|----------|----------|--------|
+| **app** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **pages** | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| **widgets** | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ |
+| **features** | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
+| **entities** | ❌ | ❌ | ❌ | ❌ | @x* | ✅ |
+| **shared** | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+
+*Use @x notation for cross-entity references
+
+---
+
+## Quick Decision Trees
 
 ### "Where does this code go?"
 
-```mermaid
-flowchart LR
-    Q1[Reusable without<br/>business logic?] --> SHARED[shared/]:::shared
-    Q2[Data model?<br/>user, product] --> ENTITIES[entities/]:::entities
-    Q3[User action?<br/>login, add-to-cart] --> FEATURES[features/]:::features
-    Q4[Complex reusable<br/>UI block?] --> WIDGETS[widgets/]:::widgets
-    Q5[Route/screen?] --> PAGES[pages/]:::pages
-    Q6[App init/config?] --> APP[app/]:::app
-
-    classDef app fill:#ef4444,stroke:#b91c1c,color:white
-    classDef pages fill:#f97316,stroke:#c2410c,color:white
-    classDef widgets fill:#eab308,stroke:#a16207,color:white
-    classDef features fill:#22c55e,stroke:#15803d,color:white
-    classDef entities fill:#3b82f6,stroke:#1d4ed8,color:white
-    classDef shared fill:#8b5cf6,stroke:#6d28d9,color:white
+```
+├─ App-wide config, providers, routing    → app/
+├─ Full page / route component            → pages/
+├─ Complex reusable UI block              → widgets/
+├─ User action with business value        → features/
+├─ Business domain object (data model)    → entities/
+└─ Reusable, domain-agnostic code         → shared/
 ```
 
-### "Entity or Feature?"
+### "Feature or Entity?"
 
 | Entity (noun) | Feature (verb) |
 |---------------|----------------|
@@ -58,43 +54,46 @@ flowchart LR
 | `comment` | `write-comment` |
 | `order` | `checkout` |
 
+**Entities:** THINGS with identity, displayed in lists
+**Features:** ACTIONS with side effects, triggered by user
+
 ---
 
-## Segment Cheatsheet
+## Segments
 
 | Segment | Purpose | Examples |
 |---------|---------|----------|
 | `ui/` | Components, styles | `UserCard.tsx`, `Button.tsx` |
-| `api/` | Backend calls | `getUser()`, `createOrder()` |
+| `api/` | Backend calls, DTOs | `getUser()`, `createOrder()` |
 | `model/` | Types, schemas, stores | `User`, `userSchema`, `useUserStore` |
 | `lib/` | Slice utilities | `formatUserName()` |
 | `config/` | Configuration | Feature flags, constants |
+
+**Naming:** Use purpose-driven names (`api/`, `model/`) not essence-based (`hooks/`, `types/`).
 
 ---
 
 ## File Structure Templates
 
 ### Entity
-
 ```
 entities/{name}/
 ├── ui/
 │   ├── {Name}Card.tsx
-│   ├── {Name}Avatar.tsx
 │   └── index.ts
 ├── api/
 │   ├── {name}Api.ts
+│   ├── queries.ts
 │   └── index.ts
 ├── model/
 │   ├── types.ts
 │   ├── schema.ts
-│   ├── store.ts
+│   ├── mapper.ts
 │   └── index.ts
 └── index.ts
 ```
 
 ### Feature
-
 ```
 features/{name}/
 ├── ui/
@@ -113,14 +112,15 @@ features/{name}/
 ```
 
 ### Page
-
 ```
 pages/{name}/
 ├── ui/
 │   ├── {Name}Page.tsx
 │   └── index.ts
 ├── api/
-│   └── loader.ts       # Optional: data fetching
+│   └── loader.ts
+├── model/
+│   └── schema.ts
 └── index.ts
 ```
 
@@ -130,41 +130,22 @@ pages/{name}/
 
 ```typescript
 // entities/user/index.ts
-// UI exports
 export { UserCard } from './ui/UserCard';
 export { UserAvatar } from './ui/UserAvatar';
-
-// API exports
 export { getUser, updateUser } from './api/userApi';
-
-// Model exports
+export { useUser, useUsers } from './api/queries';
 export type { User, UserRole } from './model/types';
 export { userSchema } from './model/schema';
-export { useUserStore } from './model/store';
+export { mapUserDTO } from './model/mapper';
 ```
 
 **Import from public API only:**
 ```typescript
-// ✅ Correct
+// ✅
 import { UserCard, type User } from '@/entities/user';
 
-// ❌ Wrong - bypasses public API
+// ❌
 import { UserCard } from '@/entities/user/ui/UserCard';
-```
-
----
-
-## TypeScript Path Aliases
-
-```json
-{
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    }
-  }
-}
 ```
 
 ---
@@ -187,52 +168,56 @@ import type { ProductId } from '@/entities/product/@x/order';
 
 ---
 
-## Common Anti-Patterns
+## TypeScript Path Aliases
+
+```json
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  }
+}
+```
+
+---
+
+## Anti-Patterns
 
 | ❌ Don't | ✅ Do |
 |----------|-------|
 | Import from higher layer | Import from lower layers only |
-| Cross-slice imports at same layer | Use lower layer or @x notation |
+| Cross-slice import (same layer) | Use lower layer or @x |
 | Generic segments: `components/`, `hooks/` | Purpose segments: `ui/`, `lib/` |
 | Wildcard exports: `export *` | Explicit exports |
 | Business logic in `shared/` | Keep shared domain-agnostic |
 | Single-use widgets | Keep in page slice |
-
----
-
-## Layer Import Matrix
-
-|  | app | pages | widgets | features | entities | shared |
-|--|-----|-------|---------|----------|----------|--------|
-| **app** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **pages** | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| **widgets** | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ |
-| **features** | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
-| **entities** | ❌ | ❌ | ❌ | ❌ | ❌* | ✅ |
-| **shared** | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-
-*Use @x notation for cross-entity references
+| Everything is a feature | Only reused interactions |
+| Import from internal paths | Always use `index.ts` |
 
 ---
 
 ## Minimal FSD Setup
 
-For smaller projects, start with:
+Start small, add layers as needed:
 
 ```
 src/
-├── app/          # Required
-├── pages/        # Required
-└── shared/       # Required
+├── app/
+├── pages/
+└── shared/
 ```
 
-Add `entities/`, `features/`, `widgets/` as needed.
+Add `entities/`, `features/`, `widgets/` when complexity grows.
 
 ---
 
 ## Resources
 
-- **Official Docs:** https://feature-sliced.design
-- **GitHub:** https://github.com/feature-sliced
-- **Examples:** https://github.com/feature-sliced/examples
-- **Discord:** https://discord.gg/S8MzWTUsmp
+| Resource | Link |
+|----------|------|
+| Official Docs | [feature-sliced.design](https://feature-sliced.design) |
+| Examples | [feature-sliced/examples](https://github.com/feature-sliced/examples) |
+| Awesome FSD | [feature-sliced/awesome](https://github.com/feature-sliced/awesome) |
+| v2.1 Notes | [Pages Come First!](https://github.com/feature-sliced/documentation/releases/tag/v2.1) |

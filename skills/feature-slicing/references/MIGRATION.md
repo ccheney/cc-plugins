@@ -1,8 +1,6 @@
 # Migrating to Feature-Sliced Design
 
-> Sources:
-> - https://feature-sliced.design/docs/guides/migration/from-custom
-> - https://feature-sliced.design/docs/guides/migration/from-v1
+> **Source:** [Migration from Custom Architecture](https://feature-sliced.design/docs/guides/migration/from-custom) | [Migration from v2.0 to v2.1](https://feature-sliced.design/docs/guides/migration/from-v2-0)
 
 ## When to Migrate
 
@@ -13,13 +11,11 @@ Consider migrating to FSD if:
 - Circular dependencies are common
 - Code ownership is unclear
 
-**Don't migrate if** the current architecture is working well for your team.
+**Don't migrate if** the current architecture works well for your team.
 
 ---
 
-## Migration Strategy
-
-### Approach: Incremental Adoption
+## Migration Strategy: Incremental Adoption
 
 FSD supports incremental adoption. Don't rewrite everything at once.
 
@@ -45,13 +41,11 @@ mkdir -p src/{app,pages,widgets,features,entities,shared}/{ui,api,model,lib}
 ### Configure Path Aliases
 
 ```json
-// tsconfig.json
 {
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      // Keep existing aliases during migration
       "@components/*": ["src/components/*"],
       "@hooks/*": ["src/hooks/*"]
     }
@@ -102,13 +96,11 @@ src/shared/
     │   ├── Button.tsx     # from components/
     │   └── index.ts
     ├── Input/
-    │   └── ...
     ├── Modal/
-    │   └── ...
     └── index.ts
 ```
 
-### Migration Script Example
+### Migration Script
 
 ```bash
 # Move utils
@@ -147,7 +139,7 @@ import { Button } from '@/shared/ui';
 
 ### Identify Entities
 
-Look for business domain objects in your codebase:
+Look for business domain objects:
 - Types/interfaces representing domain concepts
 - API calls for CRUD operations
 - Reusable UI components showing domain data
@@ -189,14 +181,9 @@ src/entities/user/
 
 ```typescript
 // entities/user/index.ts
-// UI
 export { UserAvatar } from './ui/UserAvatar';
 export { UserCard } from './ui/UserCard';
-
-// API
 export { getUser, updateUser, deleteUser } from './api/userApi';
-
-// Model
 export type { User, UserRole } from './model/types';
 export { useUserStore } from './model/store';
 ```
@@ -252,11 +239,10 @@ src/features/auth/
 ### Before
 
 ```
-src/
-├── pages/
-│   ├── Home.tsx
-│   ├── ProductList.tsx
-│   └── ProductDetail.tsx
+src/pages/
+├── Home.tsx
+├── ProductList.tsx
+└── ProductDetail.tsx
 ```
 
 ### After
@@ -287,7 +273,6 @@ import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProduct } from '@/api/products';
 import { AddToCartButton } from '@/components/AddToCartButton';
-import { ProductReviews } from '@/components/ProductReviews';
 
 export function ProductDetail() {
   const { id } = useParams();
@@ -314,7 +299,7 @@ export function ProductDetailPage() {
 
 ### Handling Circular Dependencies
 
-**Problem:** Existing code has circular imports between modules.
+**Problem:** Existing code has circular imports.
 
 **Solution:** Extract shared dependencies to lower layers.
 
@@ -324,20 +309,19 @@ export function ProductDetailPage() {
 // hooks/useAuth.ts imports from components/UserCard.tsx
 
 // After: Break the cycle
-// entities/user/ui/UserCard.tsx - no auth dependency
-// features/auth/model/store.ts - no UserCard dependency
-// pages/profile/ui/ProfilePage.tsx - composes both
+// entities/user/ui/UserCard.tsx — no auth dependency
+// features/auth/model/store.ts — no UserCard dependency
+// pages/profile/ui/ProfilePage.tsx — composes both
 ```
 
 ### Handling Global State
 
-**Problem:** Global store accessed everywhere.
+**Problem:** Monolithic store accessed everywhere.
 
 **Solution:** Split store by domain into entity/feature models.
 
 ```typescript
 // Before: Monolithic store
-// store/index.ts
 export const store = configureStore({
   reducer: {
     user: userReducer,
@@ -347,22 +331,21 @@ export const store = configureStore({
   },
 });
 
-// After: Distributed stores
-// entities/user/model/store.ts - user data
-// entities/product/model/store.ts - product data
-// features/cart/model/store.ts - cart state
-// features/auth/model/store.ts - auth state
+// After: Distributed stores (Zustand example)
+// entities/user/model/store.ts — user data
+// entities/product/model/store.ts — product data
+// features/cart/model/store.ts — cart state
+// features/auth/model/store.ts — auth state
 ```
 
-### Handling Shared Components with Business Logic
+### Shared Components with Business Logic
 
-**Problem:** Component in `components/` has business logic.
+**Problem:** Component has business logic mixed in.
 
 **Solution:** Split into entity/feature UI and shared UI.
 
 ```typescript
 // Before: ProductCard with add-to-cart logic
-// components/ProductCard.tsx
 export function ProductCard({ product }) {
   const addToCart = useAddToCart();
   return (
@@ -375,7 +358,7 @@ export function ProductCard({ product }) {
 }
 
 // After: Separated concerns
-// entities/product/ui/ProductCard.tsx - display only
+// entities/product/ui/ProductCard.tsx — display only
 export function ProductCard({ product, actions }) {
   return (
     <div>
@@ -386,7 +369,7 @@ export function ProductCard({ product, actions }) {
   );
 }
 
-// features/add-to-cart/ui/AddToCartButton.tsx - interaction
+// features/add-to-cart/ui/AddToCartButton.tsx — interaction
 export function AddToCartButton({ product }) {
   const addToCart = useCartStore((s) => s.addItem);
   return <button onClick={() => addToCart(product)}>Add to Cart</button>;
@@ -425,12 +408,9 @@ export function AddToCartButton({ product }) {
 Keep old structure working during migration:
 
 ```json
-// tsconfig.json - Support both during transition
 {
   "paths": {
-    // New FSD paths
     "@/*": ["./src/*"],
-    // Old paths (remove after migration)
     "@components/*": ["src/components/*"],
     "@hooks/*": ["src/hooks/*"]
   }
@@ -440,9 +420,18 @@ Keep old structure working during migration:
 Use feature flags to gradually switch:
 
 ```typescript
-// Temporarily support both
 import { UserCard as LegacyUserCard } from '@components/UserCard';
 import { UserCard as FSDUserCard } from '@/entities/user';
 
 export const UserCard = process.env.USE_FSD ? FSDUserCard : LegacyUserCard;
 ```
+
+---
+
+## Resources
+
+| Resource | Link |
+|----------|------|
+| Migration Guide | [feature-sliced.design/docs/guides/migration](https://feature-sliced.design/docs/guides/migration/from-custom) |
+| v2.1 Changes | [Pages Come First](https://github.com/feature-sliced/documentation/releases/tag/v2.1) |
+| Community Article | [Migrating a Legacy React Project](https://medium.com/@O5-25/migrating-a-legacy-react-project-to-feature-sliced-design-benefits-challenges-and-considerations-0aeecbc8b866) |
