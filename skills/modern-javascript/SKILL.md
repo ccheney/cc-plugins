@@ -62,16 +62,16 @@ Always prefer non-mutating methods:
 | Version | Year | Key Features |
 |---------|------|--------------|
 | ES6 | 2015 | let/const, arrow functions, classes, destructuring, spread, Promises, modules, Symbol, Map/Set, Proxy, generators |
-| ES2016 | 2016 | `Array.includes()`, exponentiation operator `**` |
-| ES2017 | 2017 | async/await, `Object.values/entries`, `padStart/padEnd`, trailing commas in function params, `SharedArrayBuffer`, `Atomics`, `Object.getOwnPropertyDescriptors()` |
-| ES2018 | 2018 | Rest/spread for objects, `for await...of`, `Promise.finally()`, RegExp named capture groups, RegExp lookbehind assertions, RegExp `/s` dotAll flag, RegExp Unicode property escapes `\p{}` |
-| ES2019 | 2019 | `.flat()`, `.flatMap()`, `Object.fromEntries()`, `trimStart/End()`, optional catch binding, `Symbol.description`, stable `Array.sort()`, well-formed `JSON.stringify()` |
-| ES2020 | 2020 | Optional chaining `?.`, nullish coalescing `??`, `BigInt`, `Promise.allSettled()`, `globalThis`, `String.matchAll()`, dynamic `import()`, `import.meta` |
-| ES2021 | 2021 | `String.replaceAll()`, `Promise.any()`, `AggregateError`, logical assignment `??=` `||=` `&&=`, numeric separators `1_000_000`, `WeakRef`, `FinalizationRegistry` |
-| ES2022 | 2022 | `.at()`, `Object.hasOwn()`, top-level await, private class fields `#field`, private methods `#method()`, static class fields, static initialization blocks, `Error.cause`, RegExp match indices `/d` flag |
-| ES2023 | 2023 | `.toSorted()`, `.toReversed()`, `.toSpliced()`, `.with()`, `.findLast()`, `.findLastIndex()`, hashbang grammar `#!`, symbols as WeakMap keys |
-| ES2024 | 2024 | `Object.groupBy()`, `Map.groupBy()`, `Promise.withResolvers()`, RegExp `/v` Unicode sets flag, `String.isWellFormed()`, `String.toWellFormed()`, resizable `ArrayBuffer`, `ArrayBuffer.transfer()`, `Atomics.waitAsync()` |
-| ES2025 | 2025 | Iterator helpers (`.map()`, `.filter()`, `.take()`, `.drop()`, `.toArray()`), Set methods (`.union()`, `.intersection()`, `.difference()`), `RegExp.escape()`, `Promise.try()`, `using`/`await using` resource management, `Array.fromAsync()`, `Error.isError()`, `Float16Array`, `Intl.DurationFormat`, import attributes |
+| ES2016 | 2016 | Array.includes(), exponentiation operator ** |
+| ES2017 | 2017 | async/await, Object.values/entries, padStart/padEnd, trailing commas, SharedArrayBuffer, Atomics |
+| ES2018 | 2018 | Rest/spread for objects, for await...of, Promise.finally(), RegExp named groups, lookbehind, dotAll flag |
+| ES2019 | 2019 | .flat(), .flatMap(), Object.fromEntries(), trimStart/End(), optional catch binding, stable Array.sort() |
+| ES2020 | 2020 | Optional chaining ?., nullish coalescing ??, BigInt, Promise.allSettled(), globalThis, dynamic import() |
+| ES2021 | 2021 | String.replaceAll(), Promise.any(), logical assignment ??= and or=, numeric separators 1_000_000 |
+| ES2022 | 2022 | .at(), Object.hasOwn(), top-level await, private class fields #field, static blocks, Error.cause |
+| ES2023 | 2023 | .toSorted(), .toReversed(), .toSpliced(), .with(), .findLast(), .findLastIndex(), hashbang grammar |
+| ES2024 | 2024 | Object.groupBy(), Map.groupBy(), Promise.withResolvers(), RegExp v flag, resizable ArrayBuffer |
+| ES2025 | 2025 | Iterator helpers (.map, .filter, .take), Set methods (.union, .intersection), RegExp.escape(), using/await using |
 
 ## Modernization Patterns
 
