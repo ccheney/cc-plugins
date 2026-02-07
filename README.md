@@ -1,6 +1,6 @@
 # robust-skills
 
-Architectural taste for AI-assisted development. Backend patterns (DDD, Hexagonal, Clean Architecture), frontend structure (Feature-Sliced Design), database design (Postgres/Drizzle), system visualization (Mermaid), and modern JavaScript (ES6-ES2025).
+Architectural taste for AI-assisted development. Backend patterns (DDD, Hexagonal, Clean Architecture), frontend structure (Feature-Sliced Design), modern CSS, database design (Postgres/Drizzle), system visualization (Mermaid), and modern JavaScript (ES6-ES2025).
 
 ```bash
 npx skills add https://github.com/ccheney/robust-skills
@@ -28,6 +28,14 @@ Modern JavaScript (ES6-ES2025) patterns and best practices. Use when writing new
 
 ```bash
 npx skills add https://github.com/ccheney/robust-skills --skill modern-javascript
+```
+
+### modern-css
+
+Modern CSS features and best practices for building interfaces with pure native CSS. Use when writing CSS for any web project, choosing layout approaches, building responsive components, implementing dark mode or theming, creating animations, styling form elements, or modernizing legacy stylesheets. Covers Grid, Subgrid, Container Queries, `:has()`, `@layer`, `@scope`, nesting, `@property`, `@function`, `oklch`, `color-mix()`, `light-dark()`, scroll-driven animations, view transitions, anchor positioning, popover, and more.
+
+```bash
+npx skills add https://github.com/ccheney/robust-skills --skill modern-css
 ```
 
 ### mermaid-diagrams
